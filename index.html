@@ -1,0 +1,3071 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Grid — Prototipo</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjs/15.2.0/math.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<style>
+  :root{
+    --paper: #F7F5F0;
+    --ink: #1C1E1B;
+    --ink-soft: #5C5F58;
+    --line: #DAD6CC;
+    --line-strong: #B8B2A2;
+    --accent: #3D6B5C;
+    --accent-soft: #E4EDE9;
+    --formula: #8A5A3B;
+    --formula-soft: #F3E7DC;
+    --danger: #A8432F;
+    --white: #FFFFFF;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--paper);
+    color:var(--ink);
+    font-family: ui-sans-serif, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+    padding:28px 32px 60px;
+  }
+  .topbar{
+    display:flex;
+    align-items:baseline;
+    justify-content:space-between;
+    margin-bottom:18px;
+    border-bottom:2px solid var(--ink);
+    padding-bottom:14px;
+  }
+  .topbar h1{
+    font-size:19px;
+    font-weight:700;
+    letter-spacing:-0.01em;
+    margin:0;
+  }
+  .topbar .sub{
+    font-size:12px;
+    color:var(--ink-soft);
+    font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+    margin-top:3px;
+  }
+  .badge{
+    font-size:11px;
+    font-family: ui-monospace, monospace;
+    color:var(--accent);
+    background:var(--accent-soft);
+    padding:4px 9px;
+    border-radius:3px;
+    font-weight:600;
+  }
+
+  .toolbar{
+    display:flex;
+    gap:8px;
+    margin-bottom:14px;
+    flex-wrap:wrap;
+    align-items:center;
+  }
+  .toolbar-gap{ flex:1 1 auto; min-width:0; }
+  .toolbar-toggle.active{
+    background:var(--accent-soft);
+    border-color:var(--accent);
+    color:var(--accent);
+  }
+  .toolbar-badge{
+    display:inline-block;
+    margin-left:5px;
+    background:var(--accent);
+    color:var(--white);
+    font-size:10px;
+    font-weight:700;
+    padding:1px 6px;
+    border-radius:9px;
+  }
+  button{
+    font-family:inherit;
+    font-size:12.5px;
+    font-weight:600;
+    border:1.5px solid var(--ink);
+    background:var(--white);
+    color:var(--ink);
+    padding:7px 13px;
+    border-radius:4px;
+    cursor:pointer;
+    transition: background .12s, transform .05s;
+  }
+  button:hover{ background:var(--accent-soft); border-color:var(--accent); color:var(--accent); }
+  button:active{ transform: translateY(1px); }
+  button.primary{ background:var(--ink); color:var(--paper); }
+  button.primary:hover{ background:var(--accent); border-color:var(--accent); color:var(--white); }
+  button.ghost{ border-color:var(--line-strong); font-weight:500; color:var(--ink-soft); }
+  button.danger-ghost{ border-color:var(--danger); color:var(--danger); }
+  button.danger-ghost:hover{ background:#FBEAE6; }
+
+  .grid-wrap{
+    overflow-x:auto;
+    border:1.5px solid var(--ink);
+    border-radius:6px;
+    background:var(--white);
+  }
+  table{
+    border-collapse:collapse;
+    width:100%;
+    min-width:600px;
+  }
+  th, td{
+    border-right:1px solid var(--line);
+    border-bottom:1px solid var(--line);
+    padding:0;
+    position:relative;
+  }
+  th:last-child, td:last-child{ border-right:none; }
+
+  thead th{
+    background:#EFECE3;
+    text-align:left;
+    padding:9px 10px;
+    font-size:11.5px;
+    font-weight:700;
+    color:var(--ink);
+    white-space:nowrap;
+    border-bottom:1.5px solid var(--ink);
+    vertical-align:top;
+  }
+  thead th .col-name{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:6px;
+  }
+  thead th .col-name input{
+    font:inherit;
+    font-weight:700;
+    font-size:11.5px;
+    border:none;
+    background:transparent;
+    color:var(--ink);
+    padding:1px 3px;
+    width:100%;
+    border-radius:3px;
+  }
+  thead th .col-name input:focus{
+    outline:none;
+    background:var(--white);
+    box-shadow: inset 0 0 0 1.5px var(--accent);
+  }
+  thead th .col-name span.editable{ cursor:text; }
+  thead th .col-name span.editable:hover{ text-decoration:underline dotted; }
+  thead th .col-type{
+    font-family: ui-monospace, monospace;
+    font-size:9.5px;
+    font-weight:500;
+    color:var(--ink-soft);
+    text-transform:uppercase;
+    letter-spacing:.04em;
+    margin-top:3px;
+  }
+  thead th.formula-col{ background:var(--formula-soft); }
+  thead th.formula-col .col-type{ color:var(--formula); }
+  thead th button.del-col{
+    border:none;
+    background:transparent;
+    color:var(--ink-soft);
+    font-size:13px;
+    padding:0 3px;
+    line-height:1;
+  }
+  thead th button.del-col:hover{ color:var(--danger); background:transparent; }
+  thead th button.edit-col{
+    border:none;
+    background:transparent;
+    color:var(--ink-soft);
+    font-size:11px;
+    padding:0 3px;
+    line-height:1;
+  }
+  thead th button.edit-col:hover{ color:var(--accent); background:transparent; }
+  thead th .col-actions{ display:flex; align-items:center; gap:2px; }
+
+  .row-num{
+    background:#EFECE3;
+    color:var(--ink-soft);
+    font-family: ui-monospace, monospace;
+    font-size:11px;
+    text-align:center;
+    width:34px;
+    min-width:34px;
+    user-select:none;
+  }
+  .row-num .del-row{
+    display:none;
+    color:var(--danger);
+    cursor:pointer;
+    font-weight:700;
+  }
+  tr:hover .row-num .rn{ display:none; }
+  tr:hover .row-num .del-row{ display:inline; }
+
+  td.cell{
+    font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+    font-size:12.5px;
+    min-width:120px;
+  }
+  td.cell input{
+    width:100%;
+    height:100%;
+    border:none;
+    outline:none;
+    background:transparent;
+    font:inherit;
+    padding:8px 10px;
+    color:var(--ink);
+  }
+  td.cell input:focus{
+    background:var(--accent-soft);
+    box-shadow: inset 0 0 0 1.5px var(--accent);
+  }
+  td.cell.formula-cell{
+    background:var(--formula-soft);
+    color:var(--formula);
+    padding:8px 10px;
+    font-weight:600;
+  }
+  td.cell.formula-cell .err{
+    color:var(--danger);
+    font-weight:600;
+  }
+  td.add-col-cell{ background:#F2F0EA; }
+
+  .add-col-btn{
+    width:100%; height:100%;
+    padding:9px 12px;
+    display:flex; align-items:center; justify-content:center;
+    color:var(--ink-soft);
+    font-size:16px;
+    cursor:pointer;
+    border:none;
+    background:transparent;
+  }
+  .add-col-btn:hover{ background:var(--accent-soft); color:var(--accent); }
+
+  .foot{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    margin-top:10px;
+    font-size:11.5px;
+    color:var(--ink-soft);
+    font-family: ui-monospace, monospace;
+  }
+
+  .modal-bg{
+    display:none;
+    position:fixed; inset:0;
+    background:rgba(28,30,27,0.45);
+    align-items:center; justify-content:center;
+    z-index:50;
+  }
+  .modal-bg.open{ display:flex; }
+  .modal{
+    background:var(--white);
+    border:1.5px solid var(--ink);
+    border-radius:8px;
+    width:360px;
+    padding:20px;
+  }
+  .modal h2{
+    font-size:14px;
+    margin:0 0 14px;
+    font-weight:700;
+  }
+  .field{
+    margin-bottom:12px;
+  }
+  .field label{
+    display:block;
+    font-size:11px;
+    font-weight:700;
+    color:var(--ink-soft);
+    margin-bottom:5px;
+    text-transform:uppercase;
+    letter-spacing:.03em;
+  }
+  .field input, .field select{
+    width:100%;
+    padding:8px 9px;
+    border:1.5px solid var(--line-strong);
+    border-radius:4px;
+    font-family:inherit;
+    font-size:13px;
+    background:var(--paper);
+  }
+  .field input:focus, .field select:focus{
+    outline:none;
+    border-color:var(--accent);
+  }
+  .field .hint{
+    font-size:11px;
+    color:var(--ink-soft);
+    margin-top:5px;
+    line-height:1.4;
+  }
+  .field .hint code{
+    background:var(--formula-soft);
+    color:var(--formula);
+    padding:1px 4px;
+    border-radius:3px;
+  }
+  .chip-row{
+    display:flex;
+    flex-wrap:wrap;
+    gap:6px;
+    margin-top:8px;
+  }
+  .chip{
+    font-family: ui-monospace, monospace;
+    font-size:11px;
+    background:var(--accent-soft);
+    color:var(--accent);
+    border:1px solid var(--accent);
+    padding:3px 8px;
+    border-radius:12px;
+    cursor:pointer;
+    font-weight:600;
+  }
+  .chip:hover{ background:var(--accent); color:var(--white); }
+  .chip-label{
+    font-size:10.5px;
+    color:var(--ink-soft);
+    text-transform:uppercase;
+    letter-spacing:.03em;
+    font-weight:700;
+    display:block;
+    margin-bottom:4px;
+  }
+  .insert-row{
+    display:flex;
+    gap:10px;
+    margin-top:10px;
+  }
+  .insert-col{ flex:1; min-width:0; }
+  .insert-col select{
+    width:100%;
+    padding:7px 8px;
+    border:1.5px solid var(--line-strong);
+    border-radius:4px;
+    font-family:inherit;
+    font-size:12px;
+    background:var(--paper);
+  }
+  .fn-preview{
+    margin-top:9px;
+    padding:8px 10px;
+    background:var(--formula-soft);
+    border:1px solid var(--formula);
+    border-radius:5px;
+    font-size:11.5px;
+    color:var(--formula);
+    line-height:1.5;
+  }
+  .fn-preview code{
+    font-family: ui-monospace, monospace;
+    font-weight:700;
+  }
+  .checkbox-row{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    margin-top:4px;
+  }
+  .checkbox-row input[type="checkbox"]{
+    width:15px; height:15px;
+  }
+  .checkbox-row label{
+    font-size:12.5px;
+    font-weight:500;
+    color:var(--ink);
+    text-transform:none;
+    margin:0;
+  }
+  .decimals-row{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    margin-top:9px;
+  }
+  .decimals-row label{
+    font-size:11px;
+    color:var(--ink-soft);
+    font-weight:700;
+    text-transform:uppercase;
+    letter-spacing:.03em;
+    margin:0;
+    white-space:nowrap;
+  }
+  .decimals-row input{
+    width:56px;
+    padding:6px 8px;
+    border:1.5px solid var(--line-strong);
+    border-radius:4px;
+    font-family:inherit;
+    font-size:13px;
+    background:var(--paper);
+  }
+  .type-locked{
+    font-size:12.5px;
+    color:var(--ink-soft);
+    background:var(--paper);
+    border:1.5px solid var(--line);
+    border-radius:4px;
+    padding:8px 9px;
+  }
+  .modal-actions{
+    display:flex;
+    justify-content:flex-end;
+    gap:8px;
+    margin-top:16px;
+  }
+
+  /* ---- celdas por tipo de campo ---- */
+  td.cell.checkbox-cell{ text-align:center; }
+  td.cell.checkbox-cell input[type="checkbox"]{ width:16px; height:16px; cursor:pointer; }
+  td.cell textarea{
+    width:100%; min-height:36px; resize:vertical;
+    border:none; outline:none; background:transparent;
+    font:inherit; padding:8px 10px; color:var(--ink);
+  }
+  td.cell textarea:focus{ background:var(--accent-soft); box-shadow: inset 0 0 0 1.5px var(--accent); }
+  td.cell select.select-field{
+    width:100%; height:100%; border:none; outline:none;
+    font:inherit; padding:7px 8px; cursor:pointer; border-radius:4px;
+  }
+  .readonly-cell{
+    padding:8px 10px;
+    color:var(--ink-soft);
+    font-style:italic;
+    font-size:12px;
+  }
+  .autonumber-cell{
+    padding:8px 10px;
+    color:var(--ink-soft);
+    font-weight:700;
+  }
+  .multiselect-cell{ padding:6px 8px; display:flex; flex-wrap:wrap; gap:4px; }
+  .ms-pill{
+    font-size:10.5px; font-weight:600; padding:2px 8px; border-radius:10px;
+    cursor:pointer; border:1px solid var(--line-strong); background:var(--white); color:var(--ink-soft);
+    font-family: ui-sans-serif, sans-serif;
+  }
+  .ms-pill.active{ border-color:transparent; color:var(--white); }
+  .rating-cell{ padding:6px 8px; letter-spacing:1px; }
+  .rating-star{ cursor:pointer; font-size:14px; color:var(--line-strong); }
+  .rating-star.filled{ color:#C9962C; }
+  .url-cell-wrap{ display:flex; align-items:center; }
+  .url-cell-wrap a{ color:var(--accent); text-decoration:none; padding:0 4px; font-size:12px; }
+
+  .toast{
+    position:fixed;
+    bottom:24px;
+    left:50%;
+    transform:translateX(-50%) translateY(20px);
+    background:var(--danger);
+    color:var(--white);
+    padding:11px 18px;
+    border-radius:6px;
+    font-size:13px;
+    font-weight:600;
+    box-shadow:0 6px 20px rgba(0,0,0,0.2);
+    opacity:0;
+    pointer-events:none;
+    transition:opacity .2s ease, transform .2s ease;
+    z-index:100;
+    max-width:90vw;
+    text-align:center;
+  }
+  .toast.show{
+    opacity:1;
+    transform:translateX(-50%) translateY(0);
+  }
+
+  /* ---- paneles de Filtro / Grupo / Ordenar ---- */
+  .panel{
+    background:var(--white);
+    border:1.5px solid var(--ink);
+    border-radius:8px;
+    padding:14px 16px;
+    margin-bottom:14px;
+    max-width:560px;
+  }
+  .panel-header{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    font-size:12.5px;
+    font-weight:700;
+    color:var(--ink-soft);
+    text-transform:uppercase;
+    letter-spacing:.03em;
+    margin-bottom:10px;
+  }
+  .panel-close{
+    border:none;
+    background:transparent;
+    font-size:16px;
+    line-height:1;
+    color:var(--ink-soft);
+    padding:0 4px;
+  }
+  .panel-close:hover{ color:var(--danger); background:transparent; }
+  .panel-actions{
+    display:flex;
+    gap:8px;
+    margin-top:8px;
+    flex-wrap:wrap;
+  }
+  button.small{ font-size:11.5px; padding:5px 10px; }
+
+  .rule-row{
+    display:flex;
+    align-items:center;
+    gap:6px;
+    margin-bottom:7px;
+    flex-wrap:wrap;
+  }
+  .rule-row select, .rule-row input[type="text"], .rule-row input[type="number"], .rule-row input[type="date"]{
+    padding:6px 7px;
+    border:1.5px solid var(--line-strong);
+    border-radius:4px;
+    font-family:inherit;
+    font-size:12px;
+    background:var(--paper);
+  }
+  .rule-conj-select{ width:64px; flex-shrink:0; }
+  .rule-field-select{ min-width:120px; flex:1; }
+  .rule-op-select{ min-width:110px; }
+  .rule-value{ min-width:100px; flex:1; }
+  .rule-remove{
+    border:none;
+    background:transparent;
+    color:var(--ink-soft);
+    font-size:14px;
+    padding:0 4px;
+    flex-shrink:0;
+  }
+  .rule-remove:hover{ color:var(--danger); background:transparent; }
+  .rule-prefix{
+    font-size:11px;
+    color:var(--ink-soft);
+    width:34px;
+    flex-shrink:0;
+    text-align:right;
+  }
+  .rule-group{
+    border:1.5px dashed var(--line-strong);
+    border-radius:6px;
+    padding:9px 10px 3px;
+    margin-bottom:7px;
+    background:var(--paper);
+  }
+  .rule-group-label{
+    font-size:10.5px;
+    color:var(--ink-soft);
+    text-transform:uppercase;
+    font-weight:700;
+    margin-bottom:6px;
+  }
+
+  .auto-sort-row{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    margin-top:12px;
+    padding-top:10px;
+    border-top:1px solid var(--line);
+    font-size:12.5px;
+    color:var(--ink-soft);
+    cursor:pointer;
+  }
+  .auto-sort-row input{ width:15px; height:15px; }
+
+  .group-header-row td{
+    background:#EFECE3;
+    border-bottom:1.5px solid var(--ink);
+    border-top:1.5px solid var(--line-strong);
+    padding:7px 12px;
+    font-size:12px;
+    font-weight:700;
+    color:var(--ink);
+    cursor:pointer;
+    user-select:none;
+  }
+  .group-header-row .group-count{
+    font-weight:500;
+    color:var(--ink-soft);
+    margin-left:6px;
+  }
+  .group-collapse-icon{
+    display:inline-block;
+    width:12px;
+    transition:transform .12s;
+  }
+  .group-collapse-icon.collapsed{ transform:rotate(-90deg); }
+
+  /* ---- pestañas de tabla ---- */
+  .tabs-bar{
+    display:flex;
+    align-items:flex-end;
+    gap:2px;
+    margin-bottom:14px;
+    border-bottom:2px solid var(--ink);
+    overflow-x:auto;
+  }
+  .tab{
+    display:flex;
+    align-items:center;
+    gap:6px;
+    padding:8px 12px;
+    font-size:12.5px;
+    font-weight:600;
+    color:var(--ink-soft);
+    background:#EFECE3;
+    border:1.5px solid var(--line-strong);
+    border-bottom:none;
+    border-radius:6px 6px 0 0;
+    cursor:pointer;
+    white-space:nowrap;
+    flex-shrink:0;
+  }
+  .tab:hover{ background:var(--accent-soft); color:var(--accent); }
+  .tab.active{
+    background:var(--white);
+    color:var(--ink);
+    border-color:var(--ink);
+    border-bottom:2px solid var(--white);
+    margin-bottom:-2px;
+    padding-bottom:9px;
+  }
+  .tab-close{
+    border:none;
+    background:transparent;
+    color:var(--ink-soft);
+    font-size:13px;
+    line-height:1;
+    padding:0 2px;
+  }
+  .tab-close:hover{ color:var(--danger); background:transparent; }
+  .tab-add{
+    flex-shrink:0;
+    border:1.5px dashed var(--line-strong);
+    border-bottom:none;
+    background:transparent;
+    color:var(--ink-soft);
+    font-size:15px;
+    font-weight:700;
+    padding:7px 12px;
+    border-radius:6px 6px 0 0;
+    cursor:pointer;
+  }
+  .tab-add:hover{ background:var(--accent-soft); color:var(--accent); border-color:var(--accent); }
+</style>
+</head>
+<body>
+
+  <div class="topbar">
+    <div>
+      <h1 id="table-title">Inventario — Base local</h1>
+      <div class="sub">prototipo · almacenamiento en memoria · sin conexión a Supabase todavía</div>
+    </div>
+    <div class="badge">● draft</div>
+  </div>
+
+  <div class="tabs-bar" id="tabs-bar"></div>
+
+  <div class="toolbar">
+    <button class="primary" onclick="addRow()">+ Fila</button>
+    <button onclick="openColumnModal()">+ Columna</button>
+    <div class="toolbar-gap"></div>
+    <button class="ghost toolbar-toggle" id="filter-btn" onclick="togglePanel('filter')">
+      ⧩ Filtro<span class="toolbar-badge" id="filter-badge" style="display:none;"></span>
+    </button>
+    <button class="ghost toolbar-toggle" id="group-btn" onclick="togglePanel('group')">
+      ▤ Grupo<span class="toolbar-badge" id="group-badge" style="display:none;"></span>
+    </button>
+    <button class="ghost toolbar-toggle" id="sort-btn" onclick="togglePanel('sort')">
+      ↕ Ordenar<span class="toolbar-badge" id="sort-badge" style="display:none;"></span>
+    </button>
+    <button class="ghost" onclick="resetData()">Reiniciar datos de ejemplo</button>
+  </div>
+
+  <!-- Panel de Filtro -->
+  <div class="panel" id="filter-panel" style="display:none;">
+    <div class="panel-header">
+      <span>Filtro</span>
+      <button class="panel-close" onclick="togglePanel('filter')">×</button>
+    </div>
+    <div id="filter-rules"></div>
+    <div class="panel-actions">
+      <button class="ghost small" onclick="addFilterRule('condition')">+ Añadir condición</button>
+      <button class="ghost small" onclick="addFilterRule('group')">+ Añadir grupo de condiciones</button>
+    </div>
+  </div>
+
+  <!-- Panel de Grupo -->
+  <div class="panel" id="group-panel" style="display:none;">
+    <div class="panel-header">
+      <span>Agrupar por</span>
+      <button class="panel-close" onclick="togglePanel('group')">×</button>
+    </div>
+    <select id="group-field-select" onchange="setGroupField(this.value)" style="width:100%;">
+      <option value="">— sin agrupar —</option>
+    </select>
+  </div>
+
+  <!-- Panel de Ordenar -->
+  <div class="panel" id="sort-panel" style="display:none;">
+    <div class="panel-header">
+      <span>Ordenar por</span>
+      <button class="panel-close" onclick="togglePanel('sort')">×</button>
+    </div>
+    <div id="sort-rules"></div>
+    <div class="panel-actions">
+      <button class="ghost small" onclick="addSortRule()">+ Añadir otra clasificación</button>
+    </div>
+    <label class="auto-sort-row">
+      <input type="checkbox" id="sort-auto-checkbox" checked onchange="toggleSortAuto(this.checked)">
+      Ordenar registros automáticamente
+    </label>
+  </div>
+
+  <div class="grid-wrap">
+    <table id="grid">
+      <thead id="grid-head"></thead>
+      <tbody id="grid-body"></tbody>
+    </table>
+  </div>
+
+  <div class="foot">
+    <span id="row-count">0 filas</span>
+    <span>Los valores viven solo en esta pestaña — al recargar se pierden. Cuando integremos Supabase, esto se vuelve persistente.</span>
+  </div>
+
+  <!-- Modal columna -->
+  <div class="modal-bg" id="modal-bg">
+    <div class="modal">
+      <h2 id="modal-title">Nueva columna</h2>
+      <div class="field">
+        <label>Nombre</label>
+        <input type="text" id="new-col-name" placeholder="ej. Precio, Stock, Margen">
+      </div>
+      <div id="col-error" class="hint" style="display:none;color:var(--danger);font-weight:600;"></div>
+      <div class="field" id="type-field">
+        <label>Tipo</label>
+        <select id="new-col-type" onchange="onTypeChange()">
+          <optgroup label="Texto">
+            <option value="text">Texto de una sola línea</option>
+            <option value="longtext">Texto largo</option>
+            <option value="codigo">Código (único, sin duplicados)</option>
+            <option value="phone">Número de teléfono</option>
+            <option value="email">Correo electrónico</option>
+            <option value="url">URL</option>
+          </optgroup>
+          <optgroup label="Selección">
+            <option value="checkbox">Casilla de verificación</option>
+            <option value="select">Selección única</option>
+            <option value="multiselect">Selección múltiple</option>
+          </optgroup>
+          <optgroup label="Fecha">
+            <option value="date">Fecha</option>
+          </optgroup>
+          <optgroup label="Números">
+            <option value="number">Número</option>
+            <option value="currency">Moneda</option>
+            <option value="percent">Porcentaje</option>
+            <option value="duration">Duración</option>
+            <option value="rating">Calificación</option>
+          </optgroup>
+          <optgroup label="Calculado">
+            <option value="formula">Fórmula</option>
+          </optgroup>
+          <optgroup label="Automático">
+            <option value="autonumber">Numeración automática</option>
+            <option value="created_time">Fecha de creación</option>
+            <option value="modified_time">Última vez modificado</option>
+          </optgroup>
+          <optgroup label="Relaciones (entre tablas)">
+            <option value="link">Vincular a otro registro</option>
+            <option value="lookup">Búsqueda</option>
+            <option value="rollup">Compilación</option>
+            <option value="count">Recuento</option>
+          </optgroup>
+          <optgroup label="Necesitan backend/usuarios (próximamente)">
+            <option value="attachment" disabled>Archivos adjuntos</option>
+            <option value="user" disabled>Usuario</option>
+            <option value="created_by" disabled>Creado por</option>
+            <option value="modified_by" disabled>Última modificación por</option>
+            <option value="barcode" disabled>Código de barras</option>
+            <option value="button" disabled>Botón</option>
+          </optgroup>
+        </select>
+        <div class="hint" id="type-disabled-hint" style="display:none;">Este tipo necesita backend real — llega cuando conectemos Supabase. Por ahora, elige otro tipo.</div>
+      </div>
+      <div class="field" id="type-locked-field" style="display:none;">
+        <label>Tipo</label>
+        <div class="type-locked" id="type-locked-label"></div>
+        <div class="hint">El tipo no se cambia después de creada. Si necesitas otro tipo, borra la columna y crea una nueva.</div>
+      </div>
+      <div class="field" id="formula-field" style="display:none;">
+        <label>Expresión</label>
+        <input type="text" id="new-col-formula" placeholder="ej. ({precio}*19%)+{precio}">
+        <div class="hint">Escribe libremente o usa los desplegables para insertar columnas y funciones sin errores de sintaxis.</div>
+
+        <div class="insert-row">
+          <div class="insert-col">
+            <span class="chip-label">Insertar columna</span>
+            <select id="chip-select" onchange="insertFromSelect()">
+              <option value="">— elegir columna —</option>
+            </select>
+          </div>
+          <div class="insert-col">
+            <span class="chip-label">Insertar función</span>
+            <select id="fn-select" onchange="insertFunction()">
+              <option value="">— catálogo de fórmulas —</option>
+            </select>
+          </div>
+        </div>
+        <div id="fn-preview" class="fn-preview" style="display:none;"></div>
+      </div>
+      <div class="field" id="format-field" style="display:none;">
+        <label id="format-field-label">Formato numérico</label>
+        <div class="checkbox-row" id="thousands-row">
+          <input type="checkbox" id="new-col-thousands">
+          <label for="new-col-thousands">Separador de miles (ej. 1.234.500)</label>
+        </div>
+        <div class="decimals-row">
+          <label for="new-col-decimals">Decimales</label>
+          <input type="number" id="new-col-decimals" min="0" max="4" value="0">
+        </div>
+        <div class="decimals-row" id="currency-symbol-row" style="display:none;">
+          <label for="new-col-symbol">Símbolo</label>
+          <select id="new-col-symbol" style="width:auto;">
+            <option value="">Sin símbolo (solo número)</option>
+            <option value="$">$ (peso/dólar)</option>
+            <option value="COP $">COP $</option>
+            <option value="US$">US$</option>
+            <option value="€">€</option>
+          </select>
+        </div>
+      </div>
+      <div class="field" id="options-field" style="display:none;">
+        <label id="options-field-label">Opciones</label>
+        <input type="text" id="new-col-options" placeholder="ej. Disponible, Agotado, En pedido">
+        <div class="hint">Escribe las opciones separadas por coma. Cada una se muestra como una etiqueta de color distinto.</div>
+      </div>
+      <div class="field" id="rating-field" style="display:none;">
+        <label>Máximo de estrellas</label>
+        <select id="new-col-maxrating">
+          <option value="3">3</option>
+          <option value="5" selected>5</option>
+          <option value="10">10</option>
+        </select>
+      </div>
+      <div class="field" id="link-table-field" style="display:none;">
+        <label>Tabla destino</label>
+        <select id="new-col-target-table"></select>
+        <div class="hint">Cada fila de esta columna se podrá vincular a UN registro de la tabla elegida (selección única).</div>
+      </div>
+      <div class="field" id="link-field-field" style="display:none;">
+        <label>Columna de vínculo</label>
+        <select id="new-col-link-field" onchange="onLinkFieldChange()"></select>
+        <div class="hint">La columna de esta tabla (tipo "Vincular a otro registro") por la que se conecta.</div>
+      </div>
+      <div class="field" id="rollup-source-field" style="display:none;">
+        <label>Tabla de origen</label>
+        <select id="new-col-rollup-table" onchange="onRollupTableChange()"></select>
+        <div class="hint">La tabla que tiene una columna de vínculo apuntando hacia ésta.</div>
+      </div>
+      <div class="field" id="rollup-link-field" style="display:none;">
+        <label>Columna de vínculo en esa tabla</label>
+        <select id="new-col-rollup-link-field"></select>
+        <div class="hint">Cuál de sus columnas "Vincular a otro registro" apunta hacia esta tabla.</div>
+      </div>
+      <div class="field" id="target-field-field" style="display:none;">
+        <label>Campo a traer</label>
+        <select id="new-col-target-field"></select>
+      </div>
+      <div class="field" id="rollup-agg-field" style="display:none;">
+        <label>Función</label>
+        <select id="new-col-aggregation">
+          <option value="SUMA">SUMA</option>
+          <option value="PROMEDIO">PROMEDIO</option>
+          <option value="MAX">MAX</option>
+          <option value="MIN">MIN</option>
+          <option value="CONCATENAR">CONCATENAR</option>
+          <option value="CONTAR">CONTAR</option>
+        </select>
+      </div>
+      <div class="modal-actions">
+        <button class="ghost" onclick="closeColumnModal()">Cancelar</button>
+        <button class="primary" id="save-col-btn" onclick="saveColumn()">Crear columna</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal confirmación (reemplaza confirm() nativo, bloqueado en el sandbox) -->
+  <div class="modal-bg" id="confirm-modal-bg">
+    <div class="modal" style="width:320px;">
+      <h2 style="margin-bottom:8px;">Confirmar</h2>
+      <p id="confirm-message" style="font-size:13px;color:var(--ink-soft);margin:0 0 16px;line-height:1.5;"></p>
+      <div class="modal-actions">
+        <button class="ghost" onclick="confirmNo()">Cancelar</button>
+        <button class="primary" style="background:var(--danger);border-color:var(--danger);" onclick="confirmYes()">Eliminar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal crear/renombrar tabla -->
+  <div class="modal-bg" id="table-modal-bg">
+    <div class="modal" style="width:320px;">
+      <h2 id="table-modal-title">Nueva tabla</h2>
+      <div class="field">
+        <label>Nombre</label>
+        <input type="text" id="table-name-input" placeholder="ej. Proveedores">
+      </div>
+      <div id="table-error" class="hint" style="display:none;color:var(--danger);font-weight:600;"></div>
+      <div class="modal-actions">
+        <button class="ghost" onclick="closeTableModal()">Cancelar</button>
+        <button class="primary" id="save-table-btn" onclick="saveTableModal()">Crear tabla</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast de aviso (reemplaza alert() nativo, bloqueado en el sandbox) -->
+  <div id="toast" class="toast"></div>
+
+<script>
+// ---------- Estado en memoria (esto se reemplaza por Supabase más adelante) ----------
+// Arquitectura multi-tabla: cada tabla es un objeto independiente con sus propias
+// columnas, filas, filtros, orden y agrupación. Las variables sueltas de abajo
+// (columns, rows, filterState...) actúan como "puntero" a la tabla activa —
+// se redirigen al cambiar de pestaña vía loadTableState()/saveActiveTableState().
+let tables = [];
+let activeTableId = null;
+
+let columns = [];
+let rows = [];
+let filterState = { conjunction: 'Y', rules: [] };
+let frozenOrder = null;
+let sortState = { rules: [], auto: true };
+let groupState = { field: '' };
+let collapsedGroups = new Set();
+let ruleIdSeq = 1; // compartido entre todas las tablas, solo necesita ser único
+let activePanel = null;
+
+// Paleta para pills de selección única/múltiple (ciclo por índice de opción)
+const PALETTE = [
+  { bg:'#E4EDE9', fg:'#3D6B5C' }, { bg:'#F3E7DC', fg:'#8A5A3B' },
+  { bg:'#FBEAE6', fg:'#A8432F' }, { bg:'#E6EAF3', fg:'#3B4E8A' },
+  { bg:'#F3E4EF', fg:'#8A3B6E' }, { bg:'#EFF3DC', fg:'#6E8A3B' },
+];
+function paletteFor(idx){ return PALETTE[idx % PALETTE.length]; }
+
+// Metadatos de cada tipo: etiqueta corta para el encabezado, si tiene edición extra, etc.
+const TYPE_LABEL = {
+  text:'texto', longtext:'texto largo', codigo:'código único', checkbox:'checkbox', select:'selección única',
+  multiselect:'selección múltiple', date:'fecha', phone:'teléfono', email:'correo', url:'url',
+  number:'número', currency:'moneda', percent:'porcentaje', duration:'duración', rating:'calificación',
+  formula:'fórmula', autonumber:'autonumeración', created_time:'fecha creación', modified_time:'últ. modificación',
+  link:'vínculo', lookup:'búsqueda', rollup:'compilación', count:'recuento',
+};
+
+// ---------- Conexión con Supabase ----------
+// ⚠️ MODO PRUEBA: usa la anon key con RLS abierto a "anon" (ver conversación).
+// Antes de dar esto a un cliente real, hay que: 1) cerrar RLS solo a "authenticated",
+// 2) conectar Supabase Auth, 3) mover estas credenciales a variables de entorno
+// (aquí quedan visibles en el HTML porque es un prototipo de un solo archivo).
+const SUPABASE_URL = 'https://dxwmairkrfcdrmjtxroz.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR4d21haXJrcmZjZHJtanR4cm96Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODcyNDcyMTYsImV4cCI6MjEwMjgyMzIxNn0._csQ9k3lMQF-kPv2yGWOMHIjlaAtWHhxtBeRLp4qYSQ';
+// ⚠️ CAUSA DEL "DataCloneError: Headers object could not be cloned" investigada
+// y confirmada contra el código fuente real de supabase-js Y contra el stack
+// trace real del error (no es una suposición). Dos causas distintas, ambas
+// reales, ambas corregidas:
+//
+// 1) createClient() inicializa el módulo de Auth (GoTrueClient) automáticamente,
+//    aunque la app nunca llame a ningún método de login. Con persistSession=true
+//    (el valor por defecto) crea un BroadcastChannel que sincroniza sesión entre
+//    pestañas vía postMessage. Esta app no usa Auth, así que se apaga entero.
+//
+// 2) La causa que realmente explica el stack trace reportado: el sandbox de
+//    Claude Artifacts intercepta `window.fetch` (se ve literalmente en el stack:
+//    "at window.fetch (about:srcdoc:145)") para poder relevar la petición fuera
+//    del iframe — el propio "about:srcdoc" confirma que es código que la
+//    plataforma inyecta antes de mi HTML, no algo de mi archivo ni de supabase-js.
+//    Confirmé en el código fuente de postgrest-js (PostgrestBuilder.ts) que la
+//    petición SALIENTE ya envía los headers como objeto plano (lo arreglaron
+//    ellos mismos por un bug parecido en React Native) — así que el problema no
+//    es lo que se envía. Es la RESPUESTA: `res.headers` de un fetch real SIEMPRE
+//    es una instancia nativa de Headers, imposible de evitar desde ningún código
+//    de aplicación — y esa instancia no sobrevive el relevo por postMessage que
+//    hace el sandbox. La corrección: reemplazar `fetch` por un `XMLHttpRequest`
+//    envuelto con la misma forma que espera postgrest-js (.ok/.status/.statusText/
+//    .text()/.headers.get()), que nunca construye un objeto Headers nativo y que,
+//    según el propio stack trace, no está interceptado por el sandbox (solo
+//    window.fetch aparece ahí, XMLHttpRequest no).
+function xhrFetch(url, options = {}){
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open(options.method || 'GET', url, true);
+    const reqHeaders = options.headers || {};
+    Object.keys(reqHeaders).forEach(k => {
+      try { xhr.setRequestHeader(k, reqHeaders[k]); } catch(e){ /* headers reservados, el navegador los pone solo */ }
+    });
+    if(options.signal){
+      if(options.signal.aborted){ reject(new DOMException('La petición fue cancelada', 'AbortError')); return; }
+      options.signal.addEventListener('abort', () => xhr.abort());
+    }
+    xhr.onload = () => {
+      const raw = xhr.getAllResponseHeaders() || '';
+      const headerMap = {};
+      raw.trim().split(/[\r\n]+/).forEach(line => {
+        const idx = line.indexOf(':');
+        if(idx === -1) return;
+        headerMap[line.slice(0, idx).trim().toLowerCase()] = line.slice(idx + 1).trim();
+      });
+      resolve({
+        ok: xhr.status >= 200 && xhr.status < 300,
+        status: xhr.status,
+        statusText: xhr.statusText,
+        headers: { get: (name) => headerMap[String(name).toLowerCase()] ?? null },
+        text: () => Promise.resolve(xhr.responseText),
+        json: () => Promise.resolve(xhr.responseText ? JSON.parse(xhr.responseText) : null),
+      });
+    };
+    xhr.onerror = () => reject(new TypeError('Fallo de red hacia Supabase (XMLHttpRequest)'));
+    xhr.onabort = () => reject(new DOMException('La petición fue cancelada', 'AbortError'));
+    xhr.send(options.body || null);
+  });
+}
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+  global: { fetch: xhrFetch },
+});
+
+// Traduce un error de Supabase a un mensaje de diagnóstico útil: distingue
+// red / autenticación / permisos RLS / Postgres / serialización-entorno,
+// sin exponer la anon key en ningún caso.
+function describeSupabaseError(e){
+  const msg = e && e.message ? e.message : String(e);
+  let category = 'error desconocido';
+  if(/Failed to fetch|NetworkError|ERR_NETWORK|Load failed/i.test(msg)) category = 'red';
+  else if(/JWT|invalid api key|401/i.test(msg)) category = 'autenticación';
+  else if((e && e.code === '42501') || /permission denied|row-level security|RLS/i.test(msg)) category = 'permisos / RLS';
+  else if(/could not be cloned|postMessage|DataCloneError/i.test(msg)) category = 'serialización / entorno (postMessage)';
+  else if(e && e.code) category = 'PostgreSQL (código ' + e.code + ')';
+  const partes = [msg];
+  if(e && e.code) partes.push('código: ' + e.code);
+  if(e && e.details) partes.push('detalles: ' + e.details);
+  if(e && e.hint) partes.push('sugerencia: ' + e.hint);
+  if(e && e.status) partes.push('HTTP ' + e.status);
+  return `[${category}] ` + partes.join(' · ');
+}
+
+// Mapeo entre el objeto de columna en memoria y la fila de app_fields.
+// Todo lo que no sea id/key/name/type (formula, format, options, targetTableId,
+// aggregation, etc.) se guarda tal cual dentro de config — así un tipo de columna
+// nuevo no necesita tocar esta función, solo agregar sus propias propiedades al col.
+function columnToDbField(col, tableId, position){
+  const { id, key, name, type, ...config } = col;
+  return { id, table_id: tableId, key, name, type, config, position: position || 0 };
+}
+function dbFieldToColumn(dbField){
+  return { id: dbField.id, key: dbField.key, name: dbField.name, type: dbField.type, ...(dbField.config || {}) };
+}
+function rowToDbRecord(row, tableId){
+  return { id: row.id, table_id: tableId, data: row.data };
+}
+
+// Todas las funciones de abajo son "fire-and-forget": no bloquean la UI (que ya
+// se actualizó de forma instantánea antes de llamarlas) — si Supabase falla
+// (sin internet, RLS mal configurado, etc.) se avisa con el toast, nunca en
+// silencio, pero el prototipo se sigue pudiendo usar en memoria mientras tanto.
+async function persistTableUpsert(table){
+  try {
+    const { error } = await sb.from('app_tables').upsert({ id: table.id, name: table.name });
+    if(error) throw error;
+  } catch(e){ showToast('No se pudo guardar la tabla en Supabase: ' + describeSupabaseError(e)); }
+}
+async function persistTableDelete(tableId){
+  try {
+    const { error } = await sb.from('app_tables').delete().eq('id', tableId);
+    if(error) throw error;
+  } catch(e){ showToast('No se pudo eliminar la tabla en Supabase: ' + describeSupabaseError(e)); }
+}
+async function persistFieldUpsert(col, tableId, position){
+  if(!tableId) return; // aún no hay tabla activa (ej. durante el arranque)
+  try {
+    const { error } = await sb.from('app_fields').upsert(columnToDbField(col, tableId, position));
+    if(error) throw error;
+  } catch(e){ showToast('No se pudo guardar la columna en Supabase: ' + describeSupabaseError(e)); }
+}
+async function persistFieldDelete(fieldId){
+  try {
+    const { error } = await sb.from('app_fields').delete().eq('id', fieldId);
+    if(error) throw error;
+  } catch(e){ showToast('No se pudo eliminar la columna en Supabase: ' + describeSupabaseError(e)); }
+}
+async function persistRecordUpsert(row, tableId){
+  if(!tableId) return;
+  try {
+    const { error } = await sb.from('app_records').upsert(rowToDbRecord(row, tableId));
+    if(error) throw error;
+  } catch(e){ showToast('No se pudo guardar la fila en Supabase: ' + describeSupabaseError(e)); }
+}
+async function persistRecordDelete(rowId){
+  try {
+    const { error } = await sb.from('app_records').delete().eq('id', rowId);
+    if(error) throw error;
+  } catch(e){ showToast('No se pudo eliminar la fila en Supabase: ' + describeSupabaseError(e)); }
+}
+// Vínculo = selección única: primero borra cualquier vínculo anterior de ese
+// campo+registro origen, y si hay un nuevo destino, inserta la fila puente real.
+async function persistLinkUpsert(fieldId, sourceRowId, targetRowId){
+  try {
+    const del = await sb.from('app_record_links').delete().eq('field_id', fieldId).eq('source_record_id', sourceRowId);
+    if(del.error) throw del.error;
+    if(targetRowId){
+      const ins = await sb.from('app_record_links').insert({ field_id: fieldId, source_record_id: sourceRowId, target_record_id: targetRowId });
+      if(ins.error) throw ins.error;
+    }
+  } catch(e){ showToast('No se pudo guardar el vínculo en Supabase: ' + describeSupabaseError(e)); }
+}
+async function persistFullSeed(t){
+  await persistTableUpsert(t);
+  for(let i = 0; i < t.columns.length; i++) await persistFieldUpsert(t.columns[i], t.id, i);
+  for(const r of t.rows) await persistRecordUpsert(r, t.id);
+}
+
+// Al abrir la página: trae todo lo que ya existe en Supabase y reconstruye las
+// tablas en memoria. Si es la primera vez (Supabase vacío) o no hay conexión,
+// arranca con los datos de ejemplo locales (y los siembra en Supabase si sí hay conexión).
+async function bootstrapFromSupabase(){
+  try {
+    const [tRes, fRes, rRes, lRes] = await Promise.all([
+      sb.from('app_tables').select('*').order('created_at'),
+      sb.from('app_fields').select('*').order('position'),
+      sb.from('app_records').select('*'),
+      sb.from('app_record_links').select('*'),
+    ]);
+    if(tRes.error) throw tRes.error;
+    if(fRes.error) throw fRes.error;
+    if(rRes.error) throw rRes.error;
+    if(lRes.error) throw lRes.error;
+
+    if(!tRes.data || tRes.data.length === 0){
+      // Primera vez: Supabase está vacío, sembramos con los datos de ejemplo.
+      tables = [buildInventoryTable()];
+      loadTableState(tables[0].id);
+      persistFullSeed(tables[0]);
+      renderTabs();
+      render();
+      return;
+    }
+
+    tables = tRes.data.map(t => ({
+      id: t.id, name: t.name, columns: [], rows: [],
+      filterState: { conjunction: 'Y', rules: [] }, frozenOrder: null,
+      sortState: { rules: [], auto: true }, groupState: { field: '' },
+      collapsedGroups: new Set(),
+    }));
+    const keyByFieldId = {};
+    fRes.data.forEach(f => {
+      const t = tables.find(x => x.id === f.table_id);
+      if(!t) return;
+      const col = dbFieldToColumn(f);
+      t.columns.push(col);
+      keyByFieldId[f.id] = col.key;
+    });
+    rRes.data.forEach(r => {
+      const t = tables.find(x => x.id === r.table_id);
+      if(!t) return;
+      t.rows.push({ id: r.id, data: r.data || {} });
+    });
+    lRes.data.forEach(l => {
+      const key = keyByFieldId[l.field_id];
+      if(!key) return;
+      for(const t of tables){
+        const row = t.rows.find(r => r.id === l.source_record_id);
+        if(row){ row.data[key] = l.target_record_id; break; }
+      }
+    });
+
+    loadTableState(tables[0].id);
+    renderTabs();
+    render();
+  } catch(e){
+    showToast('No se pudo conectar con Supabase (' + describeSupabaseError(e) + ') — usando datos locales.');
+    tables = [buildInventoryTable()];
+    loadTableState(tables[0].id);
+    renderTabs();
+    render();
+  }
+}
+
+// ---------- Multi-tabla: crear / guardar / cargar / cambiar ----------
+function createTable(name){
+  return {
+    id: crypto.randomUUID(), // mismo id que usará la fila en Supabase (app_tables.id)
+    name,
+    columns: [],
+    rows: [],
+    filterState: { conjunction: 'Y', rules: [] },
+    frozenOrder: null,
+    sortState: { rules: [], auto: true },
+    groupState: { field: '' },
+    collapsedGroups: new Set(),
+  };
+}
+// Vuelca el estado de los "punteros" activos de vuelta al objeto de la tabla.
+// Se llama SIEMPRE justo antes de cambiar de pestaña, porque columns/rows se
+// reasignan (no solo se mutan) en varias funciones — confiar en que sigan
+// siendo "la misma referencia" perdería los cambios.
+function saveActiveTableState(){
+  if(!activeTableId) return;
+  const t = tables.find(x => x.id === activeTableId);
+  if(!t) return;
+  t.columns = columns;
+  t.rows = rows;
+  t.filterState = filterState;
+  t.frozenOrder = frozenOrder;
+  t.sortState = sortState;
+  t.groupState = groupState;
+  t.collapsedGroups = collapsedGroups;
+}
+function loadTableState(tableId){
+  const t = tables.find(x => x.id === tableId);
+  if(!t) return;
+  columns = t.columns;
+  rows = t.rows;
+  filterState = t.filterState;
+  frozenOrder = t.frozenOrder;
+  sortState = t.sortState;
+  groupState = t.groupState;
+  collapsedGroups = t.collapsedGroups;
+  activeTableId = t.id;
+}
+function switchTable(tableId){
+  if(tableId === activeTableId) return;
+  saveActiveTableState();
+  loadTableState(tableId);
+  activePanel = null;
+  ['filter','group','sort'].forEach(p => {
+    document.getElementById(p + '-panel').style.display = 'none';
+    document.getElementById(p + '-btn').classList.remove('active');
+  });
+  renderTabs();
+  render();
+}
+
+function buildInventoryTable(){
+  const t = createTable('Inventario');
+  t.columns = [
+    { id: crypto.randomUUID(), key:'producto', name:'Producto', type:'text' },
+    { id: crypto.randomUUID(), key:'precio', name:'Precio', type:'currency', format:{ thousands:true, decimals:0, symbol:'$' } },
+    { id: crypto.randomUUID(), key:'cantidad', name:'Cantidad', type:'number', format:{ thousands:false, decimals:0 } },
+    { id: crypto.randomUUID(), key:'estado', name:'Estado', type:'select', options:['Disponible','Agotado','En pedido'] },
+    { id: crypto.randomUUID(), key:'total', name:'Total', type:'formula', formula:'{precio} * {cantidad}', format:{ thousands:true, decimals:0, symbol:'$' } },
+  ];
+  t.rows = [
+    { id: crypto.randomUUID(), data: { producto:'Cuaderno', precio:'3500', cantidad:'20', estado:'Disponible' } },
+    { id: crypto.randomUUID(), data: { producto:'Lapicero', precio:'1200', cantidad:'50', estado:'Disponible' } },
+    { id: crypto.randomUUID(), data: { producto:'Marcador', precio:'2800', cantidad:'15', estado:'Agotado' } },
+  ];
+  return t;
+}
+function resetData(){
+  tables = [buildInventoryTable()];
+  loadTableState(tables[0].id);
+  renderTabs();
+  render();
+}
+
+// ---------- Pestañas: crear / renombrar / eliminar ----------
+function renderTabs(){
+  const bar = document.getElementById('tabs-bar');
+  bar.innerHTML = tables.map(t => `
+    <div class="tab ${t.id===activeTableId?'active':''}" onclick="switchTable('${t.id}')" ondblclick="openRenameTableModal('${t.id}')" title="Doble clic para renombrar">
+      <span>${escapeHtml(t.name)}</span>
+      ${tables.length>1 ? `<button class="tab-close" onclick="event.stopPropagation(); deleteTable('${t.id}')" title="Eliminar tabla">×</button>` : ''}
+    </div>
+  `).join('') + `<button class="tab-add" onclick="openNewTableModal()" title="Nueva tabla">+</button>`;
+
+  const active = tables.find(t => t.id === activeTableId);
+  if(active){
+    document.getElementById('table-title').textContent = active.name + ' — Base local';
+  }
+}
+function isTableNameTaken(name, excludeId){
+  const norm = name.trim().toLowerCase();
+  return tables.some(t => t.id !== excludeId && t.name.trim().toLowerCase() === norm);
+}
+let tableModalEditingId = null;
+function openNewTableModal(){
+  tableModalEditingId = null;
+  document.getElementById('table-modal-title').textContent = 'Nueva tabla';
+  document.getElementById('save-table-btn').textContent = 'Crear tabla';
+  document.getElementById('table-name-input').value = '';
+  clearTableError();
+  document.getElementById('table-modal-bg').classList.add('open');
+}
+function openRenameTableModal(tableId){
+  const t = tables.find(x => x.id === tableId);
+  if(!t) return;
+  tableModalEditingId = tableId;
+  document.getElementById('table-modal-title').textContent = 'Renombrar tabla';
+  document.getElementById('save-table-btn').textContent = 'Guardar';
+  document.getElementById('table-name-input').value = t.name;
+  clearTableError();
+  document.getElementById('table-modal-bg').classList.add('open');
+}
+function closeTableModal(){
+  document.getElementById('table-modal-bg').classList.remove('open');
+  tableModalEditingId = null;
+}
+function showTableError(msg){
+  const el = document.getElementById('table-error');
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+function clearTableError(){
+  const el = document.getElementById('table-error');
+  el.style.display = 'none';
+  el.textContent = '';
+}
+function saveTableModal(){
+  clearTableError();
+  const name = document.getElementById('table-name-input').value.trim();
+  if(!name){ showTableError('Ponle un nombre a la tabla.'); return; }
+  if(isTableNameTaken(name, tableModalEditingId)){ showTableError('Ya existe una tabla con ese nombre — no pueden repetirse.'); return; }
+
+  if(tableModalEditingId){
+    const t = tables.find(x => x.id === tableModalEditingId);
+    t.name = name;
+    persistTableUpsert(t);
+    closeTableModal();
+    renderTabs();
+    return;
+  }
+
+  const t = createTable(name);
+  const nombreCol = { id: crypto.randomUUID(), key:'nombre', name:'Nombre', type:'text' }; // columna inicial, como Airtable
+  t.columns.push(nombreCol);
+  tables.push(t);
+  saveActiveTableState();
+  loadTableState(t.id);
+  persistTableUpsert(t);
+  persistFieldUpsert(nombreCol, t.id, 0);
+  closeTableModal();
+  renderTabs();
+  render();
+}
+function deleteTable(tableId){
+  if(tables.length <= 1){ showToast('Debe quedar al menos una tabla.'); return; }
+  const t = tables.find(x => x.id === tableId);
+  if(!t) return;
+  showConfirm(`¿Eliminar la tabla "${t.name}"? Se perderán todas sus columnas y filas.`, () => {
+    tables = tables.filter(x => x.id !== tableId);
+    if(activeTableId === tableId){
+      loadTableState(tables[0].id);
+    }
+    persistTableDelete(tableId); // Postgres hace cascade: borra sus fields/records/links solo
+    renderTabs();
+    render();
+  });
+}
+
+// ---------- Relaciones entre tablas: Vincular (selección única) / Búsqueda / Compilación / Recuento ----------
+// Evalúa una fórmula que vive en OTRA tabla (necesario para Búsqueda/Compilación
+// cuando el campo traído es a su vez una fórmula). Cambia momentáneamente a qué
+// tabla apuntan columns/rows, evalúa, y siempre las restaura — incluso si falla.
+function evalFormulaInTable(targetTable, formulaCol, row){
+  const savedColumns = columns, savedRows = rows;
+  columns = targetTable.columns;
+  rows = targetTable.rows;
+  try {
+    return evalFormulaRaw(formulaCol.formula, row, new Set([formulaCol.key]));
+  } finally {
+    columns = savedColumns;
+    rows = savedRows;
+  }
+}
+// Etiqueta visible de un registro vinculado: el valor de su primera columna (campo primario).
+function primaryLabelFor(table, row){
+  const primaryCol = table.columns[0];
+  if(!primaryCol) return '#' + row.id;
+  if(primaryCol.type === 'formula'){
+    try { return String(evalFormulaInTable(table, primaryCol, row)); } catch(e){ return '#' + row.id; }
+  }
+  const v = row.data[primaryCol.key];
+  return (v === undefined || v === null || v === '') ? '#' + row.id : String(v);
+}
+// Despachador único: da el valor "de lectura" de cualquier columna de otra tabla,
+// resolviendo fórmulas y relaciones anidadas (Búsqueda que trae otra Búsqueda, etc.).
+function computeRelationValue(table, col, row){
+  if(col.type === 'formula') return evalFormulaInTable(table, col, row);
+  if(col.type === 'lookup') return computeLookupValue(table, col, row);
+  if(col.type === 'rollup' || col.type === 'count') return computeRollupOrCount(col, row);
+  return row.data[col.key];
+}
+// Búsqueda: usa la columna de vínculo LOCAL (selección única) para traer un campo
+// del registro vinculado. No necesita ningún campo espejo en la otra tabla.
+function computeLookupValue(table, col, row){
+  const linkCol = table.columns.find(c => c.key === col.linkField);
+  if(!linkCol || linkCol.type !== 'link') return '';
+  const targetTable = tables.find(t => t.id === linkCol.targetTableId);
+  if(!targetTable) return '';
+  const targetRowId = row.data[col.linkField];
+  if(!targetRowId) return '';
+  const targetRow = targetTable.rows.find(r => String(r.id) === String(targetRowId));
+  if(!targetRow) return '';
+  const targetCol = targetTable.columns.find(c => c.key === col.targetField);
+  if(!targetCol) return '';
+  return computeRelationValue(targetTable, targetCol, targetRow);
+}
+// Compilación / Recuento: en vez de depender de un campo espejo, la columna
+// guarda directamente A QUÉ TABLA Y QUÉ COLUMNA DE VÍNCULO mirar — esa columna
+// de vínculo vive en la OTRA tabla y apunta hacia esta. Se recorre esa tabla
+// buscando qué filas tienen su vínculo apuntando al id de esta fila.
+function computeRollupOrCount(col, row){
+  const fromTable = tables.find(t => t.id === col.fromTableId);
+  if(!fromTable) return col.type === 'count' ? 0 : null;
+  const linkedRows = fromTable.rows.filter(r => String(r.data[col.fromLinkField]) === String(row.id));
+  if(col.type === 'count') return linkedRows.length;
+  const targetCol = fromTable.columns.find(c => c.key === col.targetField);
+  if(!targetCol) return null;
+  const values = linkedRows
+    .map(r => computeRelationValue(fromTable, targetCol, r))
+    .filter(v => v !== undefined && v !== null && v !== '');
+  const nums = values.map(Number).filter(n => !isNaN(n));
+  switch(col.aggregation){
+    case 'SUMA': return nums.reduce((a,b) => a+b, 0);
+    case 'PROMEDIO': return nums.length ? nums.reduce((a,b) => a+b, 0) / nums.length : 0;
+    case 'MAX': return nums.length ? Math.max(...nums) : null;
+    case 'MIN': return nums.length ? Math.min(...nums) : null;
+    case 'CONCATENAR': return values.join(', ');
+    case 'CONTAR': return values.length;
+    default: return nums.reduce((a,b) => a+b, 0);
+  }
+}
+// Compatibilidad con filtro/orden/grupo, que llaman a esto para leer valores "planos".
+function computeLinkedValue(sourceColumns, col, row){
+  const table = getActiveTable() || { columns: sourceColumns };
+  return computeRelationValue(table, col, row);
+}
+function getLinkedLabels(sourceColumns, linkFieldKey, row){
+  const linkCol = sourceColumns.find(c => c.key === linkFieldKey);
+  if(!linkCol || linkCol.type !== 'link') return [];
+  const targetTable = tables.find(t => t.id === linkCol.targetTableId);
+  if(!targetTable) return [];
+  const targetRowId = row.data[linkFieldKey];
+  if(!targetRowId) return [];
+  const targetRow = targetTable.rows.find(r => String(r.id) === String(targetRowId));
+  return targetRow ? [primaryLabelFor(targetTable, targetRow)] : [];
+}
+// Vincular: selección única — reemplaza cualquier vínculo anterior de esa celda.
+function setLinkValue(rowId, key, targetRowId){
+  const row = rows.find(r => r.id === rowId);
+  if(!row) return;
+  const col = columns.find(c => c.key === key);
+  row.data[key] = targetRowId || '';
+  touchModified(row); // ya guarda app_records.data en segundo plano
+  if(col) persistLinkUpsert(col.id, row.id, targetRowId || null); // sincroniza la FK real en app_record_links
+  render();
+}
+function getActiveTable(){ return tables.find(t => t.id === activeTableId); }
+
+// A qué "familia" de operadores pertenece cada tipo de columna
+// Las columnas de fórmula no tienen un "tipo" fijo — el resultado puede ser
+// número, texto o verdadero/falso según lo que calcule la expresión. Para
+// ofrecer los operadores correctos en el filtro (mayor que, menor que, etc.
+// cuando el resultado es numérico), se evalúa la fórmula contra las filas
+// existentes y se usa el tipo real que arroja.
+function formulaResultCategory(col){
+  for(const row of rows){
+    try {
+      const v = evalFormulaRaw(col.formula, row, new Set([col.key]));
+      if(typeof v === 'number') return 'number';
+      if(typeof v === 'boolean') return 'checkbox';
+      return 'text';
+    } catch(e){ continue; } // esta fila no se pudo evaluar (dato faltante, etc.) — probar con la siguiente
+  }
+  return 'text'; // ninguna fila evaluable todavía: por defecto texto
+}
+function fieldCategory(col){
+  if(['number','currency','percent','duration','rating','autonumber','count'].includes(col.type)) return 'number';
+  if(col.type === 'rollup') return col.aggregation === 'CONCATENAR' ? 'text' : 'number';
+  if(col.type === 'checkbox') return 'checkbox';
+  if(col.type === 'select') return 'select';
+  if(col.type === 'multiselect') return 'multiselect';
+  if(['date','created_time','modified_time'].includes(col.type)) return 'date';
+  if(col.type === 'formula') return formulaResultCategory(col);
+  if(col.type === 'link' || col.type === 'lookup') return 'text';
+  return 'text'; // text, longtext, codigo, email, phone, url
+}
+const OPERATORS_BY_CATEGORY = {
+  text:      [['contiene','contiene'],['no_contiene','no contiene'],['es','es'],['no_es','no es'],['vacio','está vacío'],['no_vacio','no está vacío']],
+  number:    [['igual','='],['distinto','≠'],['mayor','>'],['menor','<'],['mayor_igual','≥'],['menor_igual','≤'],['vacio','está vacío'],['no_vacio','no está vacío']],
+  checkbox:  [['es_verdadero','está marcado'],['es_falso','no está marcado']],
+  select:    [['es','es'],['no_es','no es'],['vacio','está vacío'],['no_vacio','no está vacío']],
+  multiselect:[['incluye','incluye'],['no_incluye','no incluye'],['vacio','está vacío'],['no_vacio','no está vacío']],
+  date:      [['es','es'],['antes','es anterior a'],['despues','es posterior a'],['vacio','está vacío'],['no_vacio','no está vacío']],
+  formula:   [['contiene','contiene'],['no_contiene','no contiene'],['es','es'],['vacio','está vacío'],['no_vacio','no está vacío']],
+};
+const NO_VALUE_OPS = ['vacio','no_vacio','es_verdadero','es_falso'];
+const COMPUTED_TYPES = ['formula','lookup','rollup','count','link'];
+
+function getFieldValueForFilter(row, col){
+  if(col.type === 'formula'){
+    try { return evalFormulaRaw(col.formula, row, new Set([col.key])); }
+    catch(e){ return undefined; }
+  }
+  if(col.type === 'link'){
+    return getLinkedLabels(columns, col.key, row).join(', ');
+  }
+  if(['lookup','rollup','count'].includes(col.type)){
+    const v = computeLinkedValue(columns, col, row);
+    return Array.isArray(v) ? v.join(', ') : v;
+  }
+  return row.data[col.key];
+}
+function evaluateCondition(row, cond){
+  const col = columns.find(c => c.key === cond.field);
+  if(!col) return true;
+  const val = getFieldValueForFilter(row, col);
+  const isEmpty = val === undefined || val === null || val === '' || (Array.isArray(val) && val.length === 0);
+  switch(cond.operator){
+    case 'vacio': return isEmpty;
+    case 'no_vacio': return !isEmpty;
+    case 'es_verdadero': return val === true;
+    case 'es_falso': return val !== true;
+  }
+  if(isEmpty) return false; // cualquier otro operador sobre un dato vacío no coincide
+  const target = (cond.value ?? '').toString().toLowerCase();
+  const valStr = String(val).toLowerCase();
+  switch(cond.operator){
+    case 'contiene': return valStr.includes(target);
+    case 'no_contiene': return !valStr.includes(target);
+    case 'es': return valStr === target;
+    case 'no_es': return valStr !== target;
+    case 'incluye': return Array.isArray(val) && val.some(v => String(v).toLowerCase() === target);
+    case 'no_incluye': return !(Array.isArray(val) && val.some(v => String(v).toLowerCase() === target));
+    case 'igual': return Number(val) === Number(cond.value);
+    case 'distinto': return Number(val) !== Number(cond.value);
+    case 'mayor': return Number(val) > Number(cond.value);
+    case 'menor': return Number(val) < Number(cond.value);
+    case 'mayor_igual': return Number(val) >= Number(cond.value);
+    case 'menor_igual': return Number(val) <= Number(cond.value);
+    case 'antes': return String(val) < String(cond.value);
+    case 'despues': return String(val) > String(cond.value);
+  }
+  return true;
+}
+function evaluateRule(row, rule){
+  if(rule.type === 'group'){
+    if(rule.rules.length === 0) return true;
+    return rule.conjunction === 'Y'
+      ? rule.rules.every(c => evaluateCondition(row, c))
+      : rule.rules.some(c => evaluateCondition(row, c));
+  }
+  return evaluateCondition(row, rule);
+}
+function rowMatchesFilters(row){
+  if(filterState.rules.length === 0) return true;
+  return filterState.conjunction === 'Y'
+    ? filterState.rules.every(r => evaluateRule(row, r))
+    : filterState.rules.some(r => evaluateRule(row, r));
+}
+function countActiveFilters(){
+  let n = 0;
+  filterState.rules.forEach(r => n += r.type === 'group' ? r.rules.length : 1);
+  return n;
+}
+
+function sortValueFor(row, col){
+  const v = COMPUTED_TYPES.includes(col.type) ? getFieldValueForFilter(row, col) : row.data[col.key];
+  if(v === undefined || v === null || v === '') return null;
+  const cat = fieldCategory(col);
+  if(cat === 'number') return Number(v);
+  if(cat === 'checkbox') return v ? 1 : 0;
+  return String(v).toLowerCase();
+}
+function getSortedRows(list){
+  if(!sortState.auto){
+    // "ordenar automáticamente" apagado: se mantiene el orden congelado en el
+    // momento de apagarlo, en vez de volver al orden de inserción original.
+    if(frozenOrder){
+      const pos = new Map(frozenOrder.map((id, i) => [id, i]));
+      return [...list].sort((a, b) => {
+        const pa = pos.has(a.id) ? pos.get(a.id) : Infinity; // filas nuevas van al final
+        const pb = pos.has(b.id) ? pos.get(b.id) : Infinity;
+        return pa - pb;
+      });
+    }
+    return list;
+  }
+  const active = sortState.rules.filter(r => r.field);
+  if(active.length === 0) return list;
+  return [...list].sort((a, b) => {
+    for(const rule of active){
+      const col = columns.find(c => c.key === rule.field);
+      if(!col) continue;
+      const va = sortValueFor(a, col), vb = sortValueFor(b, col);
+      if(va === null && vb === null) continue;
+      if(va === null) return 1;   // vacíos al final, igual que Airtable
+      if(vb === null) return -1;
+      if(va < vb) return rule.dir === 'asc' ? -1 : 1;
+      if(va > vb) return rule.dir === 'asc' ? 1 : -1;
+    }
+    return 0;
+  });
+}
+function getVisibleRows(){
+  const filtered = rows.filter(rowMatchesFilters);
+  return getSortedRows(filtered);
+}
+
+// ---------- Paneles: abrir/cerrar ----------
+function togglePanel(name){
+  const wasOpen = activePanel === name;
+  ['filter','group','sort'].forEach(p => {
+    document.getElementById(p + '-panel').style.display = 'none';
+    document.getElementById(p + '-btn').classList.remove('active');
+  });
+  if(!wasOpen){
+    document.getElementById(name + '-panel').style.display = 'block';
+    document.getElementById(name + '-btn').classList.add('active');
+    activePanel = name;
+    if(name === 'filter') renderFilterPanel();
+    if(name === 'group') renderGroupPanel();
+    if(name === 'sort') renderSortPanel();
+  } else {
+    activePanel = null;
+  }
+}
+function updateToolbarBadges(){
+  const fCount = countActiveFilters();
+  const fBadge = document.getElementById('filter-badge');
+  fBadge.style.display = fCount ? 'inline-block' : 'none';
+  fBadge.textContent = fCount;
+  document.getElementById('filter-btn').classList.toggle('toolbar-toggle-on', fCount > 0);
+
+  const gBadge = document.getElementById('group-badge');
+  const groupCol = columns.find(c => c.key === groupState.field);
+  gBadge.style.display = groupCol ? 'inline-block' : 'none';
+  gBadge.textContent = groupCol ? '1' : '';
+
+  const sCount = sortState.rules.filter(r => r.field).length;
+  const sBadge = document.getElementById('sort-badge');
+  sBadge.style.display = sCount ? 'inline-block' : 'none';
+  sBadge.textContent = sCount;
+}
+
+// ---------- Panel de Filtro ----------
+function fieldOptionsHtml(selected){
+  return columns.map(c => `<option value="${escapeAttr(c.key)}" ${c.key===selected?'selected':''}>${escapeHtml(c.name)}</option>`).join('');
+}
+function operatorOptionsHtml(col, selected){
+  const ops = OPERATORS_BY_CATEGORY[fieldCategory(col)];
+  return ops.map(([val,label]) => `<option value="${val}" ${val===selected?'selected':''}>${label}</option>`).join('');
+}
+function valueInputHtml(cond, col){
+  if(NO_VALUE_OPS.includes(cond.operator)) return '';
+  const cat = fieldCategory(col);
+  if(cat === 'select' || cat === 'multiselect'){
+    const opts = (col.options||[]).map(o => `<option value="${escapeAttr(o)}" ${o===cond.value?'selected':''}>${escapeHtml(o)}</option>`).join('');
+    return `<select class="rule-value" onchange="updateFilterValue('${cond.id}', this.value)"><option value="">—</option>${opts}</select>`;
+  }
+  if(cat === 'date'){
+    return `<input type="date" class="rule-value" value="${escapeAttr(cond.value||'')}" onchange="updateFilterValue('${cond.id}', this.value)">`;
+  }
+  if(cat === 'number'){
+    return `<input type="text" inputmode="decimal" class="rule-value" value="${escapeAttr(cond.value||'')}" placeholder="valor" onchange="updateFilterValue('${cond.id}', this.value)">`;
+  }
+  return `<input type="text" class="rule-value" value="${escapeAttr(cond.value||'')}" placeholder="valor" onchange="updateFilterValue('${cond.id}', this.value)">`;
+}
+function conditionRowHtml(cond, idx, isFirstOfScope, conjGetter, conjSetterName, ownerId){
+  const col = columns.find(c => c.key === cond.field) || columns[0];
+  const prefix = isFirstOfScope
+    ? `<span class="rule-prefix">${idx===0 ? 'Donde' : ''}</span>`
+    : `<select class="rule-conj-select" onchange="${conjSetterName}('${ownerId}', this.value)"><option value="Y" ${conjGetter==='Y'?'selected':''}>y</option><option value="O" ${conjGetter==='O'?'selected':''}>o</option></select>`;
+  return `<div class="rule-row" data-rule="${cond.id}">
+    ${prefix}
+    <select class="rule-field-select" onchange="updateFilterField('${cond.id}', this.value)">${fieldOptionsHtml(cond.field)}</select>
+    <select class="rule-op-select" onchange="updateFilterOperator('${cond.id}', this.value)">${operatorOptionsHtml(col, cond.operator)}</select>
+    ${valueInputHtml(cond, col)}
+    <button class="rule-remove" onclick="removeFilterRule('${cond.id}')" title="Quitar">×</button>
+  </div>`;
+}
+function renderFilterPanel(){
+  const container = document.getElementById('filter-rules');
+  if(filterState.rules.length === 0){
+    container.innerHTML = `<div class="hint" style="margin:0 0 6px;">No se aplican condiciones de filtrado.</div>`;
+    updateToolbarBadges();
+    return;
+  }
+  let html = '';
+  filterState.rules.forEach((rule, idx) => {
+    if(rule.type === 'group'){
+      html += `<div class="rule-group">
+        ${idx > 0 ? `<select class="rule-conj-select" style="margin-bottom:6px;" onchange="setTopConjunction(this.value)"><option value="Y" ${filterState.conjunction==='Y'?'selected':''}>y</option><option value="O" ${filterState.conjunction==='O'?'selected':''}>o</option></select>` : `<div class="rule-group-label">Grupo</div>`}
+        ${rule.rules.map((c, i) => conditionRowHtml(c, i, i===0, rule.conjunction, 'setGroupConjunction', rule.id)).join('')}
+        <button class="ghost small" style="margin-bottom:8px;" onclick="addConditionToGroup('${rule.id}')">+ condición al grupo</button>
+        <button class="rule-remove" style="float:right;margin-top:-30px;" onclick="removeFilterRule('${rule.id}')" title="Quitar grupo">×</button>
+      </div>`;
+    } else {
+      html += conditionRowHtml(rule, idx, idx===0, filterState.conjunction, 'setTopConjunctionFromRow', null);
+    }
+  });
+  container.innerHTML = html;
+  updateToolbarBadges();
+}
+function setTopConjunction(v){ filterState.conjunction = v; renderFilterPanel(); render(); }
+function setTopConjunctionFromRow(_, v){ setTopConjunction(v); }
+function setGroupConjunction(groupId, v){
+  const g = filterState.rules.find(r => r.id === groupId);
+  if(g){ g.conjunction = v; renderFilterPanel(); render(); }
+}
+function addFilterRule(kind){
+  if(kind === 'condition'){
+    const col = columns[0];
+    filterState.rules.push({ type:'condition', id:'r'+(ruleIdSeq++), field: col.key, operator: OPERATORS_BY_CATEGORY[fieldCategory(col)][0][0], value:'' });
+  } else {
+    const col = columns[0];
+    filterState.rules.push({ type:'group', id:'g'+(ruleIdSeq++), conjunction:'Y', rules:[
+      { type:'condition', id:'r'+(ruleIdSeq++), field: col.key, operator: OPERATORS_BY_CATEGORY[fieldCategory(col)][0][0], value:'' }
+    ]});
+  }
+  renderFilterPanel();
+  render();
+}
+function addConditionToGroup(groupId){
+  const g = filterState.rules.find(r => r.id === groupId);
+  if(!g) return;
+  const col = columns[0];
+  g.rules.push({ type:'condition', id:'r'+(ruleIdSeq++), field: col.key, operator: OPERATORS_BY_CATEGORY[fieldCategory(col)][0][0], value:'' });
+  renderFilterPanel();
+  render();
+}
+function findConditionAnywhere(id){
+  for(const r of filterState.rules){
+    if(r.type === 'condition' && r.id === id) return r;
+    if(r.type === 'group'){
+      const found = r.rules.find(c => c.id === id);
+      if(found) return found;
+    }
+  }
+  return null;
+}
+function updateFilterField(id, field){
+  const c = findConditionAnywhere(id);
+  if(!c) return;
+  c.field = field;
+  const col = columns.find(x => x.key === field);
+  c.operator = OPERATORS_BY_CATEGORY[fieldCategory(col)][0][0];
+  c.value = '';
+  renderFilterPanel();
+  render();
+}
+function updateFilterOperator(id, operator){
+  const c = findConditionAnywhere(id);
+  if(!c) return;
+  c.operator = operator;
+  renderFilterPanel();
+  render();
+}
+function updateFilterValue(id, value){
+  const c = findConditionAnywhere(id);
+  if(!c) return;
+  c.value = value;
+  render();
+}
+function removeFilterRule(id){
+  filterState.rules = filterState.rules.filter(r => r.id !== id);
+  filterState.rules.forEach(r => { if(r.type === 'group') r.rules = r.rules.filter(c => c.id !== id); });
+  filterState.rules = filterState.rules.filter(r => r.type !== 'group' || r.rules.length > 0);
+  renderFilterPanel();
+  render();
+}
+
+// ---------- Panel de Grupo ----------
+function renderGroupPanel(){
+  const select = document.getElementById('group-field-select');
+  select.innerHTML = '<option value="">— sin agrupar —</option>' +
+    columns.filter(c => c.type !== 'formula').map(c => `<option value="${escapeAttr(c.key)}" ${c.key===groupState.field?'selected':''}>${escapeHtml(c.name)}</option>`).join('');
+  updateToolbarBadges();
+}
+function setGroupField(key){
+  groupState.field = key;
+  collapsedGroups.clear();
+  updateToolbarBadges();
+  render();
+}
+function toggleGroupCollapse(groupValue){
+  if(collapsedGroups.has(groupValue)) collapsedGroups.delete(groupValue);
+  else collapsedGroups.add(groupValue);
+  render();
+}
+
+// ---------- Panel de Ordenar ----------
+function renderSortPanel(){
+  const container = document.getElementById('sort-rules');
+  if(sortState.rules.length === 0){
+    sortState.rules.push({ id:'s'+(ruleIdSeq++), field: columns[0] ? columns[0].key : '', dir:'asc' });
+  }
+  container.innerHTML = sortState.rules.map((rule, idx) => `
+    <div class="rule-row" data-sort="${rule.id}">
+      <select class="rule-field-select" onchange="updateSortField('${rule.id}', this.value)">${fieldOptionsHtml(rule.field)}</select>
+      <select class="rule-op-select" onchange="updateSortDir('${rule.id}', this.value)">
+        <option value="asc" ${rule.dir==='asc'?'selected':''}>A → Z / 1 → 9</option>
+        <option value="desc" ${rule.dir==='desc'?'selected':''}>Z → A / 9 → 1</option>
+      </select>
+      ${idx > 0 ? `<button class="rule-remove" onclick="removeSortRule('${rule.id}')" title="Quitar">×</button>` : ''}
+    </div>
+  `).join('');
+  document.getElementById('sort-auto-checkbox').checked = sortState.auto;
+  updateToolbarBadges();
+}
+function addSortRule(){
+  const usedKeys = sortState.rules.map(r => r.field);
+  const nextCol = columns.find(c => !usedKeys.includes(c.key)) || columns[0];
+  sortState.rules.push({ id:'s'+(ruleIdSeq++), field: nextCol ? nextCol.key : '', dir:'asc' });
+  renderSortPanel();
+  render();
+}
+function updateSortField(id, field){
+  const r = sortState.rules.find(x => x.id === id);
+  if(r){ r.field = field; render(); updateToolbarBadges(); }
+}
+function updateSortDir(id, dir){
+  const r = sortState.rules.find(x => x.id === id);
+  if(r){ r.dir = dir; render(); }
+}
+function removeSortRule(id){
+  sortState.rules = sortState.rules.filter(r => r.id !== id);
+  renderSortPanel();
+  render();
+}
+function toggleSortAuto(checked){
+  if(!checked){
+    frozenOrder = getVisibleRows().map(r => r.id); // congela el orden que hay justo ahora
+  } else {
+    frozenOrder = null; // vuelve a ordenar en vivo según las reglas activas
+  }
+  sortState.auto = checked;
+  render();
+}
+
+// ---------- Render ----------
+function render(){
+  renderHead();
+  renderBody();
+  const visible = getVisibleRows();
+  document.getElementById('row-count').textContent =
+    visible.length === rows.length
+      ? rows.length + (rows.length === 1 ? ' fila' : ' filas')
+      : `${visible.length} de ${rows.length} filas`;
+  updateToolbarBadges();
+}
+
+function renderHead(){
+  const head = document.getElementById('grid-head');
+  let html = '<tr><th class="row-num"></th>';
+  columns.forEach(col => {
+    const isFormula = col.type === 'formula';
+    const canEdit = ['number','formula','currency','percent','select','multiselect','rating','duration','link','lookup','rollup','count'].includes(col.type);
+    let typeLabel = TYPE_LABEL[col.type] || col.type;
+    if(isFormula) typeLabel = 'fx · ' + escapeHtml(col.formula);
+    html += `<th class="${isFormula ? 'formula-col' : ''}">
+      <div class="col-name">
+        <span class="editable" ondblclick="startRename(this, '${col.key}')">${escapeHtml(col.name)}</span>
+        <span class="col-actions">
+          ${canEdit ? `<button class="edit-col" title="Editar columna" onclick="openColumnModal('${col.key}')">✎</button>` : ''}
+          <button class="del-col" title="Eliminar columna" onclick="deleteColumn('${col.key}')">×</button>
+        </span>
+      </div>
+      <div class="col-type">${typeLabel}${col.format && col.format.thousands ? ' · #.###' : ''}</div>
+    </th>`;
+  });
+  html += '<th class="add-col-cell" style="width:40px;"><button class="add-col-btn" onclick="openColumnModal()" title="Agregar columna">+</button></th></tr>';
+  head.innerHTML = html;
+}
+
+function renderRowTr(row, displayIdx){
+  let html = `<tr data-row="${row.id}"><td class="row-num" title="id interno: ${row.id}"><span class="rn">${displayIdx}</span><span class="del-row" onclick="deleteRow('${row.id}')">×</span></td>`;
+  columns.forEach(col => { html += renderCell(col, row); });
+  html += '<td class="add-col-cell"></td></tr>';
+  return html;
+}
+
+function renderBody(){
+  const body = document.getElementById('grid-body');
+  const visible = getVisibleRows();
+
+  if(rows.length === 0){
+    body.innerHTML = `<tr><td colspan="${columns.length + 2}" style="padding:24px;text-align:center;color:var(--ink-soft);font-size:12.5px;">Sin filas todavía. Usa "+ Fila" para empezar.</td></tr>`;
+    return;
+  }
+  if(visible.length === 0){
+    body.innerHTML = `<tr><td colspan="${columns.length + 2}" style="padding:24px;text-align:center;color:var(--ink-soft);font-size:12.5px;">Ninguna fila cumple el filtro actual.</td></tr>`;
+    return;
+  }
+
+  const groupCol = columns.find(c => c.key === groupState.field);
+  if(!groupCol){
+    body.innerHTML = visible.map((row, i) => renderRowTr(row, i+1)).join('');
+    return;
+  }
+
+  // agrupar manteniendo el orden ya aplicado
+  const groupsMap = new Map();
+  visible.forEach(row => {
+    const raw = COMPUTED_TYPES.includes(groupCol.type) ? getFieldValueForFilter(row, groupCol) : row.data[groupCol.key];
+    const key = (raw === undefined || raw === null || raw === '') ? '(vacío)' : String(raw);
+    if(!groupsMap.has(key)) groupsMap.set(key, []);
+    groupsMap.get(key).push(row);
+  });
+
+  let html = '';
+  let counter = 1;
+  groupsMap.forEach((groupRows, groupValue) => {
+    const isCollapsed = collapsedGroups.has(groupValue);
+    html += `<tr class="group-header-row" onclick="toggleGroupCollapse('${escapeAttr(groupValue).replace(/'/g,"\\'")}')">
+      <td colspan="${columns.length + 2}">
+        <span class="group-collapse-icon ${isCollapsed?'collapsed':''}">▾</span>
+        ${escapeHtml(groupCol.name)}: ${escapeHtml(groupValue)}
+        <span class="group-count">${groupRows.length} ${groupRows.length===1?'fila':'filas'}</span>
+      </td>
+    </tr>`;
+    if(!isCollapsed){
+      groupRows.forEach(row => { html += renderRowTr(row, counter++); });
+    } else {
+      counter += groupRows.length;
+    }
+  });
+  body.innerHTML = html;
+}
+
+function renderLinkCell(col, row){
+  const targetTable = tables.find(t => t.id === col.targetTableId);
+  if(!targetTable){
+    return `<td class="cell"><div class="readonly-cell">tabla destino eliminada</div></td>`;
+  }
+  const currentId = row.data[col.key] || '';
+  const options = targetTable.rows.map(r =>
+    `<option value="${r.id}" ${String(r.id)===String(currentId)?'selected':''}>${escapeHtml(primaryLabelFor(targetTable, r))}</option>`
+  ).join('');
+  return `<td class="cell"><select class="select-field"
+            onchange="setLinkValue('${row.id}', '${col.key}', this.value)">
+    <option value="">— sin vincular —</option>
+    ${options}
+  </select></td>`;
+}
+function renderCell(col, row){
+  const raw = row.data[col.key];
+
+  if(col.type === 'formula'){
+    return `<td class="cell formula-cell">${evalFormula(col, row)}</td>`;
+  }
+
+  if(col.type === 'number' || col.type === 'currency'){
+    const val = raw ?? '';
+    const display = formatNumberDisplay(val, col.format);
+    return `<td class="cell"><input type="text" inputmode="decimal" value="${escapeAttr(display)}" data-raw="${escapeAttr(val)}"
+              onfocus="this.value=this.dataset.raw"
+              onblur="commitNumberCell('${row.id}', '${col.key}', this)"></td>`;
+  }
+
+  if(col.type === 'percent'){
+    const val = raw ?? '';
+    const decimals = col.format && col.format.decimals !== undefined ? col.format.decimals : 0;
+    const display = val === '' ? '' : (decimals > 0 ? Number(val).toFixed(decimals) : String(Number(val))) + '%';
+    return `<td class="cell"><input type="text" inputmode="decimal" value="${escapeAttr(display)}" data-raw="${escapeAttr(val)}"
+              onfocus="this.value=this.dataset.raw"
+              onblur="commitPercentCell('${row.id}', '${col.key}', this)"></td>`;
+  }
+
+  if(col.type === 'duration'){
+    const val = raw ?? '';
+    const display = val === '' ? '' : formatDuration(val);
+    return `<td class="cell"><input type="text" value="${escapeAttr(display)}" data-raw="${escapeAttr(val)}"
+              placeholder="min."
+              onfocus="this.value=this.dataset.raw"
+              onblur="commitDurationCell('${row.id}', '${col.key}', this)"></td>`;
+  }
+
+  if(col.type === 'checkbox'){
+    return `<td class="cell checkbox-cell"><input type="checkbox" ${raw ? 'checked' : ''}
+              onchange="setCellValue('${row.id}', '${col.key}', this.checked)"></td>`;
+  }
+
+  if(col.type === 'select'){
+    const opts = col.options || [];
+    const currentIdx = opts.indexOf(raw);
+    const pal = currentIdx >= 0 ? paletteFor(currentIdx) : { bg:'transparent', fg:'var(--ink-soft)' };
+    const optionsHtml = ['<option value=""></option>'].concat(
+      opts.map(o => `<option value="${escapeAttr(o)}" ${o === raw ? 'selected' : ''}>${escapeHtml(o)}</option>`)
+    ).join('');
+    return `<td class="cell"><select class="select-field" style="background:${pal.bg};color:${pal.fg};"
+              onchange="setCellValue('${row.id}', '${col.key}', this.value)">${optionsHtml}</select></td>`;
+  }
+
+  if(col.type === 'multiselect'){
+    const opts = col.options || [];
+    const selected = Array.isArray(raw) ? raw : [];
+    const pills = opts.map((o, i) => {
+      const active = selected.includes(o);
+      const pal = paletteFor(i);
+      const style = active ? `background:${pal.fg};` : '';
+      return `<span class="ms-pill ${active ? 'active' : ''}" style="${style}"
+                onclick="toggleMultiSelect('${row.id}', '${col.key}', '${escapeAttr(o).replace(/'/g,"\\'")}')">${escapeHtml(o)}</span>`;
+    }).join('');
+    return `<td class="cell multiselect-cell">${pills || '<span class="readonly-cell" style="padding:2px 0;">sin opciones</span>'}</td>`;
+  }
+
+  if(col.type === 'date'){
+    const val = raw ?? '';
+    return `<td class="cell"><input type="date" value="${escapeAttr(val)}"
+              onchange="setCellValue('${row.id}', '${col.key}', this.value)"></td>`;
+  }
+
+  if(col.type === 'rating'){
+    const max = col.maxRating || 5;
+    const val = Number(raw) || 0;
+    let stars = '';
+    for(let i = 1; i <= max; i++){
+      stars += `<span class="rating-star ${i <= val ? 'filled' : ''}" onclick="setCellValue('${row.id}', '${col.key}', ${i === val ? 0 : i})">★</span>`;
+    }
+    return `<td class="cell rating-cell">${stars}</td>`;
+  }
+
+  if(col.type === 'longtext'){
+    const val = raw ?? '';
+    return `<td class="cell"><textarea rows="1" onchange="setCellValue('${row.id}', '${col.key}', this.value)">${escapeHtml(val)}</textarea></td>`;
+  }
+
+  if(col.type === 'url'){
+    const val = raw ?? '';
+    const safe = /^https?:\/\//i.test(val);
+    return `<td class="cell"><div class="url-cell-wrap">
+              <input type="url" value="${escapeAttr(val)}" style="flex:1;"
+                onchange="setCellValue('${row.id}', '${col.key}', this.value)">
+              ${safe ? `<a href="${escapeAttr(val)}" target="_blank" rel="noopener" title="Abrir">↗</a>` : ''}
+            </div></td>`;
+  }
+
+  if(col.type === 'email' || col.type === 'phone'){
+    const val = raw ?? '';
+    const inputType = col.type === 'email' ? 'email' : 'tel';
+    return `<td class="cell"><input type="${inputType}" value="${escapeAttr(val)}"
+              onchange="setCellValue('${row.id}', '${col.key}', this.value)"></td>`;
+  }
+
+  if(col.type === 'link'){
+    return renderLinkCell(col, row);
+  }
+
+  if(col.type === 'lookup'){
+    const vals = computeLinkedValue(columns, col, row);
+    const display = Array.isArray(vals) ? vals.join(', ') : (vals ?? '');
+    return `<td class="cell"><div class="readonly-cell" style="font-style:normal;">${display ? escapeHtml(display) : '<span style="color:var(--ink-soft);">—</span>'}</div></td>`;
+  }
+
+  if(col.type === 'rollup'){
+    const val = computeLinkedValue(columns, col, row);
+    let display;
+    if(typeof val === 'number'){
+      display = col.format ? formatNumberDisplay(String(val), col.format) : (Number.isInteger(val) ? String(val) : val.toFixed(2));
+    } else {
+      display = val ?? '—';
+    }
+    return `<td class="cell"><div class="readonly-cell" style="font-style:normal;font-weight:600;color:var(--accent);">${escapeHtml(String(display))}</div></td>`;
+  }
+
+  if(col.type === 'count'){
+    const val = computeLinkedValue(columns, col, row);
+    return `<td class="cell"><div class="autonumber-cell">${val}</div></td>`;
+  }
+
+  if(col.type === 'codigo'){
+    const val = raw ?? '';
+    return `<td class="cell"><input type="text" value="${escapeAttr(val)}" placeholder="código único"
+              onchange="setCodigoCell('${row.id}', '${col.key}', this.value, this)"></td>`;
+  }
+
+  if(col.type === 'autonumber'){
+    return `<td class="cell"><div class="autonumber-cell">#${escapeHtml(raw ?? '')}</div></td>`;
+  }
+
+  if(col.type === 'created_time' || col.type === 'modified_time'){
+    return `<td class="cell"><div class="readonly-cell">${escapeHtml(formatDateTime(raw))}</div></td>`;
+  }
+
+  // texto simple (default)
+  const val = raw ?? '';
+  return `<td class="cell"><input type="text" value="${escapeAttr(val)}"
+            onchange="setCellValue('${row.id}', '${col.key}', this.value)"></td>`;
+}
+
+// ---------- Formato de números ----------
+function formatNumberDisplay(rawStr, format){
+  if(rawStr === '' || rawStr === undefined || rawStr === null) return '';
+  const num = Number(rawStr);
+  if(isNaN(num)) return rawStr;
+  const decimals = format && format.decimals !== undefined ? format.decimals : 0;
+  let out;
+  if(format && format.thousands){
+    out = num.toLocaleString('es-CO', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+  } else {
+    out = decimals > 0 ? num.toFixed(decimals) : String(num);
+  }
+  if(format && format.symbol){
+    out = format.symbol + ' ' + out;
+  }
+  return out;
+}
+function parseNumberInput(str){
+  // el usuario puede escribir con puntos de miles y coma decimal (formato es-CO)
+  let s = String(str).trim();
+  if(s === '') return '';
+  s = s.replace(/[^0-9,.\-]/g, ''); // quita símbolo de moneda u otros caracteres
+  s = s.replace(/\./g, '').replace(',', '.');
+  return s;
+}
+function commitNumberCell(rowId, key, input){
+  const raw = parseNumberInput(input.value);
+  const row = rows.find(r => r.id === rowId);
+  if(row){ row.data[key] = raw; touchModified(row); }
+  render();
+}
+function commitPercentCell(rowId, key, input){
+  const raw = parseNumberInput(input.value.replace('%',''));
+  const row = rows.find(r => r.id === rowId);
+  if(row){ row.data[key] = raw; touchModified(row); }
+  render();
+}
+function commitDurationCell(rowId, key, input){
+  const raw = parseNumberInput(input.value);
+  const row = rows.find(r => r.id === rowId);
+  if(row){ row.data[key] = raw; touchModified(row); }
+  render();
+}
+function formatDuration(minutesStr){
+  const total = Number(minutesStr);
+  if(isNaN(total)) return minutesStr;
+  const h = Math.floor(total / 60);
+  const m = Math.round(total % 60);
+  if(h === 0) return `${m}m`;
+  if(m === 0) return `${h}h`;
+  return `${h}h ${m}m`;
+}
+function formatDateTime(iso){
+  if(!iso) return '—';
+  const d = new Date(iso);
+  if(isNaN(d.getTime())) return '—';
+  return d.toLocaleString('es-CO', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' });
+}
+
+// ---------- Escritura genérica de celda (texto, checkbox, select, fecha, etc.) ----------
+function setCellValue(rowId, key, value){
+  const row = rows.find(r => r.id === rowId);
+  if(!row) return;
+  row.data[key] = value;
+  touchModified(row);
+  render();
+}
+// Aviso temporal no bloqueante (reemplaza alert(), bloqueado en el sandbox del artifact)
+let toastTimer = null;
+function showToast(message){
+  const el = document.getElementById('toast');
+  el.textContent = message;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 3200);
+}
+// Columna "Código": igual que texto, pero valida que el valor no exista ya
+// en OTRA fila de la misma columna antes de guardarlo. Si es un duplicado,
+// avisa y revierte el input al valor anterior — no lo guarda.
+function setCodigoCell(rowId, key, value, inputEl){
+  const row = rows.find(r => r.id === rowId);
+  if(!row) return;
+  const nuevo = value.trim();
+  if(nuevo === ''){
+    row.data[key] = '';
+    touchModified(row);
+    render();
+    return;
+  }
+  const duplicado = rows.find(r => r.id !== rowId && (r.data[key] || '').trim() === nuevo);
+  if(duplicado){
+    const idxDup = rows.indexOf(duplicado) + 1;
+    showToast(`"${nuevo}" ya existe en la fila ${idxDup} — no se puede repetir un código.`);
+    inputEl.value = row.data[key] || ''; // revierte al valor anterior, no guarda el duplicado
+    return;
+  }
+  row.data[key] = nuevo;
+  touchModified(row);
+  render();
+}
+function toggleMultiSelect(rowId, key, option){
+  const row = rows.find(r => r.id === rowId);
+  if(!row) return;
+  const current = Array.isArray(row.data[key]) ? row.data[key] : [];
+  row.data[key] = current.includes(option)
+    ? current.filter(o => o !== option)
+    : [...current, option];
+  touchModified(row);
+  render();
+}
+function touchModified(row){
+  columns.forEach(c => {
+    if(c.type === 'modified_time') row.data[c.key] = new Date().toISOString();
+  });
+  persistRecordUpsert(row, activeTableId); // guarda en Supabase en segundo plano, sin bloquear la UI
+}
+
+// ---------- Fórmulas ----------
+// Convierte porcentajes estilo Excel: "19%" pegado a un número se lee como 0.19,
+// no como el operador módulo que usa mathjs por defecto.
+function excelizePercent(expr){
+  return expr.replace(/(\d+(?:\.\d+)?)\s*%/g, '($1/100)');
+}
+// Traduce comparadores estilo Excel a los que espera mathjs:
+// '=' de comparación (no de asignación) -> '==', y '<>' (Excel "distinto de") -> '!='.
+// No toca '==', '!=', '<=', '>=' que ya son válidos tal cual.
+// Esto es traducción de SINTAXIS (pasa antes del parser, porque un '=' suelto
+// es un error de sintaxis para mathjs, no algo resoluble en tiempo de evaluación).
+function excelizeEquals(expr){
+  expr = expr.replace(/<>/g, '!=');
+  expr = expr.replace(/(?<![!<>=])=(?!=)/g, '==');
+  return expr;
+}
+
+// ---------- Capa de comparación segura entre tipos ----------
+// mathjs NO tiene ninguna firma nativa para comparar texto con texto: cuando
+// le llegan dos strings, intenta convertirlos a número como último recurso, y
+// truena si no puede ("no listo"=="no listo" fallaba por esto). Por eso los
+// operadores de comparación (==, !=, <, >, <=, >=) se reemplazan por funciones
+// propias ANTES de evaluar, usando el propio parser de mathjs para no romper
+// la precedencia de operadores en fórmulas complejas.
+//
+// POLÍTICA DE TIPOS:
+// - Igualdad entre tipos distintos (número vs texto, booleano vs texto, etc.)
+//   -> siempre false, nunca error. Comparar peras con manzanas no es un bug,
+//   es simplemente "no son iguales".
+// - Orden (<,>,<=,>=) entre tipos distintos -> error controlado (mostrado como
+//   "revisa..." en la celda), porque "¿5 es mayor que 'listo'?" no tiene una
+//   respuesta razonable — a diferencia de la igualdad, aquí forzar un resultado
+//   silencioso escondería una fórmula mal construida.
+function tipoDe(v){
+  if(typeof v === 'boolean') return 'boolean';
+  if(typeof v === 'number') return 'number';
+  return 'string';
+}
+function IGUAL_SEGURO(a, b){
+  if(tipoDe(a) !== tipoDe(b)) return false;
+  return a === b;
+}
+function DISTINTO_SEGURO(a, b){ return !IGUAL_SEGURO(a, b); }
+function ordenComparable(a, b){
+  if(tipoDe(a) !== tipoDe(b)){
+    throw new Error('tipo_incompatible:' + tipoDe(a) + ':' + tipoDe(b));
+  }
+}
+function MENOR_SEGURO(a, b){ ordenComparable(a, b); return a < b; }
+function MAYOR_SEGURO(a, b){ ordenComparable(a, b); return a > b; }
+function MENOREQ_SEGURO(a, b){ ordenComparable(a, b); return a <= b; }
+function MAYOREQ_SEGURO(a, b){ ordenComparable(a, b); return a >= b; }
+const CMP_MAP = {
+  equal: 'IGUAL_SEGURO', unequal: 'DISTINTO_SEGURO',
+  smaller: 'MENOR_SEGURO', larger: 'MAYOR_SEGURO',
+  smallerEq: 'MENOREQ_SEGURO', largerEq: 'MAYOREQ_SEGURO',
+};
+// Recorre el árbol de la fórmula ya parseada y sustituye cada nodo de
+// comparación nativo por una llamada a nuestra función seguraequivalente,
+// preservando el resto de la estructura (funciones, anidamiento, precedencia).
+function transformarComparacionesSeguras(node){
+  return node.transform(function(n){
+    if(n.type === 'OperatorNode' && CMP_MAP[n.fn]){
+      return new math.FunctionNode(new math.SymbolNode(CMP_MAP[n.fn]), n.args);
+    }
+    return n;
+  });
+}
+
+// Resuelve el valor de un campo para una fila, junto con su TIPO declarado
+// (el de la columna, no adivinado por el contenido). Si el campo es a su vez
+// una fórmula, la evalúa primero (permite fórmulas que referencian otras
+// fórmulas). `visiting` detecta referencias circulares.
+function resolveFieldValue(key, row, visiting){
+  const col = columns.find(c => c.key === key);
+  if(!col) throw new Error('missing:' + key);
+
+  if(col.type === 'link'){
+    const v = row.data[key] || [];
+    if(v.length === 0) throw new Error('missing:' + key);
+    return { value: v.length, type: 'number' }; // en fórmulas, un vínculo se lee como su cantidad
+  }
+  if(['lookup','rollup','count'].includes(col.type)){
+    const computed = computeLinkedValue(columns, col, row);
+    if(computed === undefined || computed === null || computed === ''){
+      throw new Error('missing:' + key);
+    }
+    if(Array.isArray(computed)){
+      if(computed.length === 0) throw new Error('missing:' + key);
+      return { value: computed.length, type: 'number' }; // búsqueda con varios valores -> cantidad
+    }
+    const t = typeof computed === 'number' ? 'number' : typeof computed === 'boolean' ? 'checkbox' : 'text';
+    return { value: computed, type: t };
+  }
+
+  if(col.type !== 'formula'){
+    const v = row.data[key];
+    if(v === undefined || v === null || v === ''){
+      throw new Error('missing:' + key);
+    }
+    if(Array.isArray(v) && v.length === 0){
+      throw new Error('missing:' + key);
+    }
+    return { value: v, type: col.type };
+  }
+  if(visiting.has(key)){
+    throw new Error('circular:' + key);
+  }
+  visiting.add(key);
+  const result = evalFormulaRaw(col.formula, row, visiting);
+  visiting.delete(key);
+  // el resultado de una fórmula anidada ya viene tipado (number|boolean|string)
+  const t = typeof result === 'number' ? 'number' : typeof result === 'boolean' ? 'checkbox' : 'text';
+  return { value: result, type: t };
+}
+
+// Convierte {valor, tipo} en el literal correcto para el motor, según el TIPO
+// DE COLUMNA — no según si el contenido "parece" número. Esta es la política
+// central: un campo de texto que contenga "100" sigue siendo texto siempre;
+// un campo numérico siempre es número; un checkbox siempre es un booleano
+// real (true/false), nunca 1/0.
+const TIPOS_NUMERICOS = ['number', 'currency', 'percent', 'duration', 'rating', 'autonumber'];
+function literalTipado(value, type){
+  if(type === 'checkbox'){
+    return typeof value === 'boolean' ? String(value) : 'false';
+  }
+  if(TIPOS_NUMERICOS.includes(type)){
+    const num = Number(value);
+    return isNaN(num) ? 'null' : String(num);
+  }
+  if(type === 'multiselect'){
+    return String(Array.isArray(value) ? value.length : 0); // cantidad elegida
+  }
+  // texto, fecha, email, url, teléfono, selección única, timestamps, etc.
+  return JSON.stringify(String(value));
+}
+
+// ---------- Funciones "macro": SI y SIERROR se evalúan ANTES de sustituir columnas,
+// rama por rama, para que se comporten como en Excel (solo evalúan la rama que necesitan
+// y por lo tanto pueden atrapar un dato faltante en la rama que no se usa).
+function findMatchingParen(str, openIdx){
+  let depth = 0;
+  for(let i = openIdx; i < str.length; i++){
+    if(str[i] === '(') depth++;
+    else if(str[i] === ')'){ depth--; if(depth === 0) return i; }
+  }
+  return -1;
+}
+function splitTopLevelArgs(str){
+  const args = [];
+  let depth = 0, start = 0;
+  for(let i = 0; i < str.length; i++){
+    const c = str[i];
+    if(c === '(') depth++;
+    else if(c === ')') depth--;
+    else if(c === ',' && depth === 0){ args.push(str.slice(start, i)); start = i + 1; }
+  }
+  args.push(str.slice(start));
+  return args.map(s => s.trim());
+}
+// Literal seguro para re-insertar un resultado intermedio (SI/SIERROR) en el
+// texto de la fórmula. Debe distinguir número / booleano / texto — si no, un
+// resultado booleano se convertiría en el TEXTO "true" en vez del booleano
+// real, rompiendo comparaciones y anidamientos posteriores.
+function literalFor(val){
+  if(typeof val === 'number') return String(val);
+  if(typeof val === 'boolean') return String(val);
+  return JSON.stringify(String(val));
+}
+// Límite de palabra: sin esto, "O(" dentro de "PROMEDIO(" se confundiría con
+// la función O() y rompería fórmulas que ni siquiera usan O.
+const MACRO_PATTERN = /(?<![A-Za-z0-9_])(SIERROR|SI|Y|O)\(/;
+function expandMacros(expr, row, visiting){
+  let guard = 0;
+  let match;
+  while((match = MACRO_PATTERN.exec(expr)) && guard++ < 80){
+    const fnName = match[1];
+    const openIdx = match.index + fnName.length;
+    const closeIdx = findMatchingParen(expr, openIdx);
+    if(closeIdx === -1) break; // paréntesis sin cerrar: se deja para que mathjs marque el error
+    const inner = expr.slice(openIdx + 1, closeIdx);
+    const args = splitTopLevelArgs(inner);
+    let resultLiteral;
+
+    if(fnName === 'SI' && args.length >= 2){
+      const [condExpr, thenExpr, elseExpr = '""'] = args;
+      const condVal = evalFormulaRaw(condExpr, row, new Set(visiting));
+      const chosenExpr = condVal ? thenExpr : elseExpr;
+      resultLiteral = literalFor(evalFormulaRaw(chosenExpr, row, new Set(visiting)));
+    } else if(fnName === 'SIERROR' && args.length >= 1){
+      const [exprPart, fallbackExpr = '""'] = args;
+      try{
+        resultLiteral = literalFor(evalFormulaRaw(exprPart, row, new Set(visiting)));
+      } catch(e){
+        resultLiteral = literalFor(evalFormulaRaw(fallbackExpr, row, new Set(visiting)));
+      }
+    } else if(fnName === 'Y' && args.length >= 1){
+      // cortocircuito: en cuanto un argumento da falso, ya no evalúa los
+      // siguientes — así un dato faltante en una rama que ya no hace falta
+      // no rompe la fórmula (mismo comportamiento que ya tenía SI()).
+      let result = true;
+      for(const a of args){
+        const v = evalFormulaRaw(a, row, new Set(visiting));
+        if(!v){ result = false; break; }
+      }
+      resultLiteral = literalFor(result);
+    } else if(fnName === 'O' && args.length >= 1){
+      let result = false;
+      for(const a of args){
+        const v = evalFormulaRaw(a, row, new Set(visiting));
+        if(v){ result = true; break; }
+      }
+      resultLiteral = literalFor(result);
+    } else {
+      break; // argumentos insuficientes: se deja para que mathjs marque el error
+    }
+    expr = expr.slice(0, match.index) + resultLiteral + expr.slice(closeIdx + 1);
+  }
+  return expr;
+}
+
+// Limpia el ruido de punto flotante típico de JavaScript (ej. 350000.00000000006)
+function limpiarFlotante(n){ return Number(n.toPrecision(15)); }
+// REDONDEAR de Excel: redondea al más cercano. Soporta decimales negativos
+// para redondear a decenas/centenas/miles (dec=-1, -2, -3...).
+function REDONDEAR(num, dec){
+  num = Number(num); dec = Number(dec) || 0;
+  const factor = Math.pow(10, dec);
+  const redondeado = Math.round(limpiarFlotante(num * factor));
+  return limpiarFlotante(redondeado / factor);
+}
+// REDONDEAR.MAS de Excel: SIEMPRE redondea lejos de cero, sin importar el dígito.
+function REDONDEAR_MAS(num, dec){
+  num = Number(num); dec = Number(dec) || 0;
+  const factor = Math.pow(10, dec);
+  const shifted = limpiarFlotante(num * factor);
+  const rounded = num >= 0 ? Math.ceil(shifted) : Math.floor(shifted);
+  return limpiarFlotante(rounded / factor);
+}
+// REDONDEAR.MENOS de Excel: SIEMPRE redondea hacia cero (trunca), sin importar el dígito.
+function REDONDEAR_MENOS(num, dec){
+  num = Number(num); dec = Number(dec) || 0;
+  const factor = Math.pow(10, dec);
+  const shifted = limpiarFlotante(num * factor);
+  const rounded = num >= 0 ? Math.floor(shifted) : Math.ceil(shifted);
+  return limpiarFlotante(rounded / factor);
+}
+
+// ---------- Funciones directas: reciben ya los valores resueltos de las columnas ----------
+const FORMULA_SCOPE = {
+  // comparación segura entre tipos (usadas internamente por transformarComparacionesSeguras)
+  IGUAL_SEGURO, DISTINTO_SEGURO, MENOR_SEGURO, MAYOR_SEGURO, MENOREQ_SEGURO, MAYOREQ_SEGURO,
+  // booleanos literales sin comillas: True/TRUE/False/FALSE se normalizan igual que true/false.
+  // "true"/"True"/"TRUE" ENTRE COMILLAS siguen siendo texto — esto no las toca.
+  True: true, TRUE: true, False: false, FALSE: false,
+  // texto
+  concat: (...args) => args.map(a => typeof a === 'number' ? String(a) : a).join(''),
+  MAYUSC: (s) => String(s).toUpperCase(),
+  MINUSC: (s) => String(s).toLowerCase(),
+  NOMPROPIO: (s) => String(s).replace(/\S+/g, t => t.charAt(0).toUpperCase() + t.slice(1).toLowerCase()),
+  LARGO: (s) => String(s).length,
+  ESPACIOS: (s) => String(s).trim().replace(/\s+/g, ' '),
+  IZQUIERDA: (s, n) => String(s).slice(0, Number(n)),
+  DERECHA: (s, n) => String(s).slice(-Number(n)),
+  SUSTITUIR: (s, buscar, reemplazar) => String(s).split(String(buscar)).join(String(reemplazar)),
+  // matemáticas
+  SUMA: (...args) => args.reduce((a, b) => a + Number(b), 0),
+  PROMEDIO: (...args) => args.reduce((a, b) => a + Number(b), 0) / args.length,
+  MAX: (...args) => Math.max(...args.map(Number)),
+  MIN: (...args) => Math.min(...args.map(Number)),
+  REDONDEAR, REDONDEAR_MAS, REDONDEAR_MENOS,
+  ABS: (num) => Math.abs(Number(num)),
+  // lógicas (Y/O se resuelven como macro más arriba; NO se queda como función directa)
+  NO: (val) => !val,
+  // fecha
+  DIAS: (fechaFin, fechaInicio) => Math.round((new Date(fechaFin) - new Date(fechaInicio)) / 86400000),
+  HOY: () => new Date().toISOString().slice(0, 10),
+};
+
+function evalFormulaRaw(expr, row, visiting){
+  expr = expandMacros(expr, row, visiting);
+  let substituted = expr.replace(/\{([a-zA-Z0-9_]+)\}/g, (m, key) => {
+    const { value, type } = resolveFieldValue(key, row, visiting);
+    return literalTipado(value, type);
+  });
+  substituted = excelizePercent(substituted);
+  substituted = excelizeEquals(substituted);
+  const node = transformarComparacionesSeguras(math.parse(substituted));
+  const result = node.evaluate(FORMULA_SCOPE);
+  // política Excel: dividir entre cero es un error real (#DIV/0!), no un
+  // "Infinity" silencioso como haría JavaScript por defecto.
+  if(typeof result === 'number' && !isFinite(result)){
+    throw new Error('division_invalida');
+  }
+  return result;
+}
+function evalFormula(col, row){
+  try{
+    const visiting = new Set([col.key]);
+    const result = evalFormulaRaw(col.formula, row, visiting);
+    if(typeof result === 'number'){
+      if(col.format){
+        return formatNumberDisplay(String(result), col.format);
+      }
+      return Number.isInteger(result) ? String(result) : result.toFixed(2);
+    }
+    return String(result);
+  } catch(e){
+    const msg = String(e.message);
+    if(msg.startsWith('missing:')){
+      return '<span class="err">— falta ' + msg.split(':')[1] + '</span>';
+    }
+    if(msg.startsWith('circular:')){
+      return '<span class="err">referencia circular</span>';
+    }
+    if(msg.startsWith('tipo_incompatible:')){
+      const [, tipoA, tipoB] = msg.split(':');
+      return `<span class="err" title="Intentaste comparar un ${tipoA} con un ${tipoB} usando <,>,<=,>=. Solo se pueden ordenar valores del mismo tipo. Si buscabas ver si son iguales o distintos, usa = o <>.">— tipos distintos (${tipoA} vs ${tipoB})</span>`;
+    }
+    if(msg === 'division_invalida'){
+      return '<span class="err" title="División entre cero (o resultado no numérico). Envuelve la operación en SIERROR(expresión, valor_alternativo) si quieres controlar qué se muestra en ese caso.">— división entre cero</span>';
+    }
+    const undef = msg.match(/Undefined symbol (\w+)/);
+    if(undef){
+      return `<span class="err" title="'${undef[1]}' no es una columna ni una función. Si es texto, ponlo entre comillas: &quot;${undef[1]}&quot;">— revisa "${undef[1]}" (¿falta entre comillas?)</span>`;
+    }
+    const typeMismatch = msg.match(/Cannot convert "([^"]*)" to a number/);
+    if(typeMismatch){
+      return `<span class="err" title="Estás comparando un número contra el texto '${typeMismatch[1]}'. Un checkbox se lee como 1 (marcado) o 0 (sin marcar), no como la palabra 'verdadero'/'falso' — úsalo directo: SI({columna}, ...) en vez de SI({columna}=&quot;verdadero&quot;, ...)">— revisa "${typeMismatch[1]}" (¿comparando número vs. texto?)</span>`;
+    }
+    return `<span class="err" title="${escapeAttr(msg)}">error en fórmula</span>`;
+  }
+}
+// ---------- Acciones de fila ----------
+function addRow(){
+  const data = {};
+  const now = new Date().toISOString();
+  columns.forEach(c => {
+    if(['formula','lookup','rollup','count'].includes(c.type)) return; // se calculan, no se guardan
+    if(c.type === 'autonumber'){
+      c.nextSeq = c.nextSeq || 1;
+      data[c.key] = String(c.nextSeq);
+      c.nextSeq++;
+    } else if(c.type === 'created_time' || c.type === 'modified_time'){
+      data[c.key] = now;
+    } else if(c.type === 'checkbox'){
+      data[c.key] = false;
+    } else if(c.type === 'multiselect'){
+      data[c.key] = [];
+    } else if(c.type === 'link'){
+      data[c.key] = ''; // selección única: un solo id o vacío, no un array
+    } else {
+      data[c.key] = '';
+    }
+  });
+  const newRow = { id: crypto.randomUUID(), data };
+  rows.push(newRow);
+  persistRecordUpsert(newRow, activeTableId);
+  render();
+}
+function deleteRow(id){
+  rows = rows.filter(r => r.id !== id);
+  persistRecordDelete(id);
+  render();
+}
+
+// ---------- Renombrar columna (doble clic en el título) ----------
+function startRename(span, key){
+  const col = columns.find(c => c.key === key);
+  if(!col) return;
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.value = col.name;
+  span.replaceWith(input);
+  input.focus();
+  input.select();
+  const commit = () => {
+    const val = input.value.trim();
+    if(val){
+      col.name = val; // ojo: el "key" interno no cambia, solo la etiqueta visible
+      persistFieldUpsert(col, activeTableId, columns.indexOf(col));
+    }
+    render();
+  };
+  input.addEventListener('blur', commit);
+  input.addEventListener('keydown', e => {
+    if(e.key === 'Enter') input.blur();
+    if(e.key === 'Escape'){ render(); }
+  });
+}
+
+// ---------- Acciones de columna ----------
+let editingKey = null;
+
+function openColumnModal(key){
+  editingKey = key || null;
+  const col = editingKey ? columns.find(c => c.key === editingKey) : null;
+  clearColError();
+
+  document.getElementById('modal-title').textContent = col ? 'Editar columna' : 'Nueva columna';
+  document.getElementById('save-col-btn').textContent = col ? 'Guardar cambios' : 'Crear columna';
+  document.getElementById('new-col-name').value = col ? col.name : '';
+  document.getElementById('new-col-formula').value = col && col.formula ? col.formula : '';
+  document.getElementById('new-col-thousands').checked = !!(col && col.format && col.format.thousands);
+  document.getElementById('new-col-decimals').value = col && col.format && col.format.decimals !== undefined ? col.format.decimals : 0;
+  document.getElementById('new-col-symbol').value = col && col.format && col.format.symbol ? col.format.symbol : '$';
+  document.getElementById('new-col-options').value = col && col.options ? col.options.join(', ') : '';
+  document.getElementById('new-col-maxrating').value = col && col.maxRating ? String(col.maxRating) : '5';
+
+  const typeField = document.getElementById('type-field');
+  const typeLockedField = document.getElementById('type-locked-field');
+  if(col){
+    typeField.style.display = 'none';
+    typeLockedField.style.display = 'block';
+    document.getElementById('type-locked-label').textContent = TYPE_LABEL[col.type] || col.type;
+  } else {
+    typeField.style.display = 'block';
+    typeLockedField.style.display = 'none';
+    document.getElementById('new-col-type').value = 'text';
+  }
+
+  applyTypeFields(col ? col.type : document.getElementById('new-col-type').value);
+  if(col && col.type === 'link'){
+    populateLinkTableSelect(col.targetTableId);
+  }
+  if(col && col.type === 'lookup'){
+    populateLinkFieldSelect(col.linkField);
+    document.getElementById('new-col-link-field').value = col.linkField || '';
+    const linkCol = columns.find(c => c.key === col.linkField);
+    populateTargetFieldSelect(linkCol ? linkCol.targetTableId : null, col.targetField);
+    document.getElementById('new-col-target-field').value = col.targetField || '';
+  }
+  if(col && ['rollup','count'].includes(col.type)){
+    populateRollupTableSelect(col.fromTableId);
+    document.getElementById('new-col-rollup-table').value = col.fromTableId || '';
+    populateRollupLinkFieldSelect(col.fromTableId, col.fromLinkField);
+    document.getElementById('new-col-rollup-link-field').value = col.fromLinkField || '';
+    if(col.type === 'rollup'){
+      populateTargetFieldSelect(col.fromTableId, col.targetField);
+      document.getElementById('new-col-target-field').value = col.targetField || '';
+      document.getElementById('new-col-aggregation').value = col.aggregation || 'SUMA';
+    }
+  }
+  renderChips(editingKey);
+  populateFormulaCatalog();
+  document.getElementById('fn-preview').style.display = 'none';
+  document.getElementById('modal-bg').classList.add('open');
+}
+
+// Muestra/oculta los bloques de configuración según el tipo elegido (formato, opciones, estrellas...)
+function applyTypeFields(type){
+  document.getElementById('formula-field').style.display = type === 'formula' ? 'block' : 'none';
+
+  const needsFormat = ['number','currency','percent','formula'].includes(type);
+  document.getElementById('format-field').style.display = needsFormat ? 'block' : 'none';
+  document.getElementById('currency-symbol-row').style.display = (type === 'currency' || type === 'formula') ? 'flex' : 'none';
+  document.getElementById('thousands-row').style.display = type === 'percent' ? 'none' : 'flex';
+  document.getElementById('format-field-label').textContent =
+    type === 'currency' ? 'Formato de moneda' : type === 'percent' ? 'Formato de porcentaje' :
+    type === 'formula' ? 'Formato del resultado (si es número)' : 'Formato numérico';
+
+  const needsOptions = type === 'select' || type === 'multiselect';
+  document.getElementById('options-field').style.display = needsOptions ? 'block' : 'none';
+  document.getElementById('options-field-label').textContent =
+    type === 'multiselect' ? 'Opciones (selección múltiple)' : 'Opciones (selección única)';
+
+  document.getElementById('rating-field').style.display = type === 'rating' ? 'block' : 'none';
+
+  document.getElementById('link-table-field').style.display = type === 'link' ? 'block' : 'none';
+  document.getElementById('link-field-field').style.display = type === 'lookup' ? 'block' : 'none';
+  document.getElementById('rollup-source-field').style.display = ['rollup','count'].includes(type) ? 'block' : 'none';
+  document.getElementById('rollup-link-field').style.display = ['rollup','count'].includes(type) ? 'block' : 'none';
+  document.getElementById('target-field-field').style.display = ['lookup','rollup'].includes(type) ? 'block' : 'none';
+  document.getElementById('rollup-agg-field').style.display = type === 'rollup' ? 'block' : 'none';
+
+  if(type === 'link') populateLinkTableSelect(null);
+  if(type === 'lookup'){
+    populateLinkFieldSelect(null);
+    const linkCol = columns.find(c => c.key === document.getElementById('new-col-link-field').value);
+    populateTargetFieldSelect(linkCol ? linkCol.targetTableId : null, null);
+  }
+  if(['rollup','count'].includes(type)){
+    populateRollupTableSelect(null);
+    const tableId = document.getElementById('new-col-rollup-table').value;
+    populateRollupLinkFieldSelect(tableId, null);
+    if(type === 'rollup') populateTargetFieldSelect(tableId, null);
+  }
+
+  const disabledTypes = ['attachment','user','created_by','modified_by','barcode','button'];
+  const hint = document.getElementById('type-disabled-hint');
+  const saveBtn = document.getElementById('save-col-btn');
+  if(disabledTypes.includes(type)){
+    hint.style.display = 'block';
+    saveBtn.disabled = true;
+    saveBtn.style.opacity = '0.5';
+  } else {
+    hint.style.display = 'none';
+    saveBtn.disabled = false;
+    saveBtn.style.opacity = '1';
+  }
+}
+function onTypeChange(){
+  applyTypeFields(document.getElementById('new-col-type').value);
+}
+// ---------- Poblar los selects de relación ----------
+function populateLinkTableSelect(selectedId){
+  const select = document.getElementById('new-col-target-table');
+  select.innerHTML = tables.map(t => `<option value="${t.id}" ${t.id===selectedId?'selected':''}>${escapeHtml(t.name)}</option>`).join('');
+}
+// Columnas de vínculo LOCALES (para Búsqueda: "traer un campo del registro al que apunto").
+function populateLinkFieldSelect(selectedKey){
+  const select = document.getElementById('new-col-link-field');
+  const linkCols = columns.filter(c => c.type === 'link');
+  if(linkCols.length === 0){
+    select.innerHTML = '<option value="">— primero crea una columna "Vincular a otro registro" —</option>';
+    return;
+  }
+  select.innerHTML = linkCols.map(c => `<option value="${escapeAttr(c.key)}" ${c.key===selectedKey?'selected':''}>${escapeHtml(c.name)}</option>`).join('');
+}
+// Tabla de origen para Compilación/Recuento (cualquier OTRA tabla, no la actual).
+function populateRollupTableSelect(selectedId){
+  const select = document.getElementById('new-col-rollup-table');
+  const current = getActiveTable();
+  const others = tables.filter(t => !current || t.id !== current.id);
+  if(others.length === 0){
+    select.innerHTML = '<option value="">— no hay otras tablas —</option>';
+    return;
+  }
+  select.innerHTML = others.map(t => `<option value="${t.id}" ${t.id===selectedId?'selected':''}>${escapeHtml(t.name)}</option>`).join('');
+}
+// Columnas de vínculo DE LA TABLA DE ORIGEN elegida, que apunten de vuelta a esta tabla.
+function populateRollupLinkFieldSelect(tableId, selectedKey){
+  const select = document.getElementById('new-col-rollup-link-field');
+  const current = getActiveTable();
+  const table = tables.find(t => t.id === tableId);
+  if(!table || !current){ select.innerHTML = '<option value="">—</option>'; return; }
+  const candidates = table.columns.filter(c => c.type === 'link' && c.targetTableId === current.id);
+  if(candidates.length === 0){
+    select.innerHTML = '<option value="">— esa tabla no tiene ningún vínculo hacia ésta —</option>';
+    return;
+  }
+  select.innerHTML = candidates.map(c => `<option value="${escapeAttr(c.key)}" ${c.key===selectedKey?'selected':''}>${escapeHtml(c.name)}</option>`).join('');
+}
+// Campo a traer: puede venir de la tabla destino de un vínculo local (Búsqueda)
+// o directo de la tabla de origen elegida (Compilación) — por eso recibe el
+// id de tabla ya resuelto, no una columna de vínculo.
+function populateTargetFieldSelect(tableId, selectedKey){
+  const select = document.getElementById('new-col-target-field');
+  const table = tables.find(t => t.id === tableId);
+  if(!table){
+    select.innerHTML = '<option value="">—</option>';
+    return;
+  }
+  select.innerHTML = table.columns.map(c => `<option value="${escapeAttr(c.key)}" ${c.key===selectedKey?'selected':''}>${escapeHtml(c.name)}</option>`).join('');
+}
+function onLinkFieldChange(){
+  const linkFieldKey = document.getElementById('new-col-link-field').value;
+  const linkCol = columns.find(c => c.key === linkFieldKey);
+  populateTargetFieldSelect(linkCol ? linkCol.targetTableId : null, null);
+}
+function onRollupTableChange(){
+  const tableId = document.getElementById('new-col-rollup-table').value;
+  populateRollupLinkFieldSelect(tableId, null);
+  populateTargetFieldSelect(tableId, null);
+}
+function renderChips(excludeKey){
+  const select = document.getElementById('chip-select');
+  const usable = columns.filter(c => c.key !== excludeKey);
+
+  if(usable.length === 0){
+    select.innerHTML = '<option value="">— no hay columnas para referenciar —</option>';
+    return;
+  }
+  select.innerHTML = '<option value="">— elegir columna —</option>' +
+    usable.map(c => `<option value="${escapeAttr(c.key)}">${c.type === 'formula' ? 'fx · ' : ''}${escapeHtml(c.name)} · {${escapeHtml(c.key)}}</option>`).join('');
+}
+function insertAtCursor(text){
+  const input = document.getElementById('new-col-formula');
+  const start = input.selectionStart ?? input.value.length;
+  const end = input.selectionEnd ?? input.value.length;
+  input.value = input.value.slice(0, start) + text + input.value.slice(end);
+  input.focus();
+  const pos = start + text.length;
+  input.setSelectionRange(pos, pos);
+}
+function insertChip(key){
+  insertAtCursor('{' + key + '}');
+}
+function insertFromSelect(){
+  const select = document.getElementById('chip-select');
+  if(select.value){
+    insertChip(select.value);
+    select.value = '';
+  }
+}
+
+// ---------- Catálogo de las 20 fórmulas (equivalente a Excel, dentro de la misma fila) ----------
+const FORMULA_CATALOG = [
+  { cat:'Matemáticas', name:'SUMA', template:'SUMA(valor1, valor2)', desc:'Suma varios valores de la misma fila.' },
+  { cat:'Matemáticas', name:'PROMEDIO', template:'PROMEDIO(valor1, valor2)', desc:'Promedia varios valores de la misma fila.' },
+  { cat:'Matemáticas', name:'MAX', template:'MAX(valor1, valor2)', desc:'El mayor entre varios valores.' },
+  { cat:'Matemáticas', name:'MIN', template:'MIN(valor1, valor2)', desc:'El menor entre varios valores.' },
+  { cat:'Matemáticas', name:'REDONDEAR', template:'REDONDEAR(numero, decimales)', desc:'Redondea al valor más cercano (como el REDONDEAR de Excel). Decimales negativos redondean a decenas/centenas/miles: -1, -2, -3...' },
+  { cat:'Matemáticas', name:'REDONDEAR_MAS', template:'REDONDEAR_MAS(numero, decimales)', desc:'Como REDONDEAR.MAS de Excel: SIEMPRE redondea hacia arriba (lejos de cero), sin importar el dígito.' },
+  { cat:'Matemáticas', name:'REDONDEAR_MENOS', template:'REDONDEAR_MENOS(numero, decimales)', desc:'Como REDONDEAR.MENOS de Excel: SIEMPRE redondea hacia abajo (hacia cero, trunca), sin importar el dígito.' },
+  { cat:'Matemáticas', name:'ABS', template:'ABS(numero)', desc:'Valor absoluto (quita el signo negativo).' },
+  { cat:'Lógicas', name:'SI', template:'SI(condición, si_verdadero, si_falso)', desc:'Condicional. Reemplaza "si_verdadero"/"si_falso" por texto entre comillas o por un número — no los dejes tal cual, son solo ejemplo.' },
+  { cat:'Lógicas', name:'Y', template:'Y(condición1, condición2)', desc:'Verdadero solo si TODAS las condiciones se cumplen.' },
+  { cat:'Lógicas', name:'O', template:'O(condición1, condición2)', desc:'Verdadero si AL MENOS UNA condición se cumple.' },
+  { cat:'Lógicas', name:'SIERROR', template:'SIERROR(expresión, valor_si_error)', desc:'Si la expresión falla (ej. dato faltante), muestra el valor alternativo en vez de romperse.' },
+  { cat:'Lógicas', name:'NO', template:'NO(condición)', desc:'Invierte verdadero/falso.' },
+  { cat:'Texto', name:'CONCAT', template:'concat(texto1, texto2)', desc:'Une texto y/o columnas en un solo valor. Acepta más de dos: concat(a, " - ", b, " ", c). No hace falta convertir números, se pegan directo.' },
+  { cat:'Texto', name:'MAYUSC', template:'MAYUSC(texto)', desc:'Convierte el texto a MAYÚSCULAS.' },
+  { cat:'Texto', name:'MINUSC', template:'MINUSC(texto)', desc:'Convierte el texto a minúsculas.' },
+  { cat:'Texto', name:'NOMPROPIO', template:'NOMPROPIO(texto)', desc:'Pone en mayúscula la primera letra de cada palabra.' },
+  { cat:'Texto', name:'LARGO', template:'LARGO(texto)', desc:'Cuenta cuántos caracteres tiene un texto.' },
+  { cat:'Texto', name:'ESPACIOS', template:'ESPACIOS(texto)', desc:'Quita espacios sobrantes al inicio, final y entre palabras.' },
+  { cat:'Texto', name:'IZQUIERDA', template:'IZQUIERDA(texto, cantidad)', desc:'Toma los primeros N caracteres de un texto.' },
+  { cat:'Texto', name:'DERECHA', template:'DERECHA(texto, cantidad)', desc:'Toma los últimos N caracteres de un texto.' },
+  { cat:'Texto', name:'SUSTITUIR', template:'SUSTITUIR(texto, buscar, reemplazar)', desc:'Reemplaza una parte del texto por otra.' },
+  { cat:'Fecha', name:'DIAS', template:'DIAS(fecha_fin, fecha_inicio)', desc:'Diferencia en días entre dos fechas.' },
+  { cat:'Fecha', name:'HOY', template:'HOY()', desc:'Devuelve la fecha de hoy. Útil junto con DIAS: DIAS(HOY(), {fecha_compra}) para saber cuántos días han pasado.' },
+];
+
+function populateFormulaCatalog(){
+  const select = document.getElementById('fn-select');
+  const cats = [...new Set(FORMULA_CATALOG.map(f => f.cat))];
+  select.innerHTML = '<option value="">— catálogo de fórmulas —</option>' +
+    cats.map(cat => `<optgroup label="${escapeHtml(cat)}">` +
+      FORMULA_CATALOG.filter(f => f.cat === cat)
+        .map(f => `<option value="${escapeAttr(f.name)}">${escapeHtml(f.name)}</option>`).join('') +
+      '</optgroup>'
+    ).join('');
+}
+function insertFunction(){
+  const select = document.getElementById('fn-select');
+  const name = select.value;
+  if(!name) return;
+  const fn = FORMULA_CATALOG.find(f => f.name === name);
+  if(!fn) return;
+  insertAtCursor(fn.template);
+  const preview = document.getElementById('fn-preview');
+  preview.style.display = 'block';
+  preview.innerHTML = `<code>${escapeHtml(fn.template)}</code><br>${escapeHtml(fn.desc)}`;
+  select.value = '';
+}
+function closeColumnModal(){
+  document.getElementById('modal-bg').classList.remove('open');
+  editingKey = null;
+}
+function readFormatFromModal(type){
+  const fmt = {
+    thousands: type === 'percent' ? false : document.getElementById('new-col-thousands').checked,
+    decimals: Math.max(0, Math.min(4, parseInt(document.getElementById('new-col-decimals').value, 10) || 0)),
+  };
+  if(type === 'currency' || type === 'formula'){
+    const symbol = document.getElementById('new-col-symbol').value;
+    if(symbol) fmt.symbol = symbol; // vacío = "sin símbolo", no se guarda la propiedad
+  }
+  return fmt;
+}
+function readOptionsFromModal(){
+  return document.getElementById('new-col-options').value
+    .split(',')
+    .map(s => s.trim())
+    .filter(Boolean);
+}
+function showColError(msg){
+  const el = document.getElementById('col-error');
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+function clearColError(){
+  const el = document.getElementById('col-error');
+  el.style.display = 'none';
+  el.textContent = '';
+}
+// Valor inicial correcto para una columna nueva, según su tipo (usado al crear
+// la columna para las filas ya existentes, y al crear una fila nueva).
+function initialValueFor(type, rowIndex){
+  if(type === 'autonumber') return String(rowIndex + 1);
+  if(type === 'created_time' || type === 'modified_time') return new Date().toISOString();
+  if(type === 'checkbox') return false;
+  if(type === 'multiselect') return [];
+  return ''; // 'link' incluido: selección única, un solo id o vacío
+}
+function saveColumn(){
+  clearColError();
+  const name = document.getElementById('new-col-name').value.trim();
+  const formula = document.getElementById('new-col-formula').value.trim();
+
+  if(!name){ showColError('Ponle un nombre a la columna.'); return; }
+
+  if(editingKey){
+    const col = columns.find(c => c.key === editingKey);
+    if(!col) return;
+    col.name = name;
+    if(col.type === 'formula'){
+      if(!formula){ showColError('Escribe la expresión de la fórmula.'); return; }
+      col.formula = formula;
+    }
+    if(['number','currency','percent','formula'].includes(col.type)){
+      col.format = readFormatFromModal(col.type);
+    }
+    if(col.type === 'select' || col.type === 'multiselect'){
+      const opts = readOptionsFromModal();
+      if(opts.length === 0){ showColError('Escribe al menos una opción.'); return; }
+      col.options = opts;
+    }
+    if(col.type === 'rating'){
+      col.maxRating = parseInt(document.getElementById('new-col-maxrating').value, 10) || 5;
+    }
+    if(col.type === 'link'){
+      const targetTableId = document.getElementById('new-col-target-table').value;
+      if(!targetTableId){ showColError('Elige la tabla destino.'); return; }
+      col.targetTableId = targetTableId;
+    }
+    if(col.type === 'lookup'){
+      const linkField = document.getElementById('new-col-link-field').value;
+      if(!linkField){ showColError('Elige la columna de vínculo.'); return; }
+      const targetField = document.getElementById('new-col-target-field').value;
+      if(!targetField){ showColError('Elige el campo a traer.'); return; }
+      col.linkField = linkField;
+      col.targetField = targetField;
+    }
+    if(['rollup','count'].includes(col.type)){
+      const fromTableId = document.getElementById('new-col-rollup-table').value;
+      const fromLinkField = document.getElementById('new-col-rollup-link-field').value;
+      if(!fromTableId || !fromLinkField){ showColError('Elige la tabla de origen y su columna de vínculo hacia ésta.'); return; }
+      col.fromTableId = fromTableId;
+      col.fromLinkField = fromLinkField;
+      if(col.type === 'rollup'){
+        const targetField = document.getElementById('new-col-target-field').value;
+        if(!targetField){ showColError('Elige el campo a traer.'); return; }
+        col.targetField = targetField;
+        col.aggregation = document.getElementById('new-col-aggregation').value;
+      }
+    }
+    closeColumnModal();
+    persistFieldUpsert(col, activeTableId, columns.indexOf(col));
+    render();
+    return;
+  }
+
+  const type = document.getElementById('new-col-type').value;
+  const disabledTypes = ['attachment','user','created_by','modified_by','barcode','button'];
+  if(disabledTypes.includes(type)){ showColError('Este tipo todavía no está disponible.'); return; }
+
+  const key = name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || ('col_' + Date.now());
+  if(columns.some(c => c.key === key)){ showColError('Ya existe una columna con ese nombre.'); return; }
+  if(type === 'formula' && !formula){ showColError('Escribe la expresión de la fórmula.'); return; }
+  if((type === 'select' || type === 'multiselect') && readOptionsFromModal().length === 0){
+    showColError('Escribe al menos una opción.'); return;
+  }
+
+  const col = { id: crypto.randomUUID(), key, name, type };
+  if(type === 'formula') col.formula = formula;
+  if(['number','currency','percent','formula'].includes(type)) col.format = readFormatFromModal(type);
+  if(type === 'select' || type === 'multiselect') col.options = readOptionsFromModal();
+  if(type === 'rating') col.maxRating = parseInt(document.getElementById('new-col-maxrating').value, 10) || 5;
+  if(type === 'autonumber') col.nextSeq = rows.length + 1;
+
+  if(type === 'link'){
+    const targetTableId = document.getElementById('new-col-target-table').value;
+    if(!targetTableId){ showColError('Elige la tabla destino.'); return; }
+    col.targetTableId = targetTableId;
+  }
+  if(type === 'lookup'){
+    const linkField = document.getElementById('new-col-link-field').value;
+    if(!linkField){ showColError('Elige la columna de vínculo (primero crea una columna tipo "Vincular a otro registro").'); return; }
+    const targetField = document.getElementById('new-col-target-field').value;
+    if(!targetField){ showColError('Elige el campo a traer de la tabla vinculada.'); return; }
+    col.linkField = linkField;
+    col.targetField = targetField;
+  }
+  if(['rollup','count'].includes(type)){
+    const fromTableId = document.getElementById('new-col-rollup-table').value;
+    const fromLinkField = document.getElementById('new-col-rollup-link-field').value;
+    if(!fromTableId || !fromLinkField){ showColError('Elige la tabla de origen y su columna de vínculo hacia ésta (esa tabla necesita una columna "Vincular a otro registro" que apunte hacia aquí).'); return; }
+    col.fromTableId = fromTableId;
+    col.fromLinkField = fromLinkField;
+    if(type === 'rollup'){
+      const targetField = document.getElementById('new-col-target-field').value;
+      if(!targetField){ showColError('Elige el campo a traer.'); return; }
+      col.targetField = targetField;
+      col.aggregation = document.getElementById('new-col-aggregation').value;
+    }
+  }
+
+  columns.push(col);
+
+  if(!['formula','lookup','rollup','count'].includes(type)){
+    rows.forEach((r, idx) => { r.data[key] = initialValueFor(type, idx); });
+  }
+
+  closeColumnModal();
+  persistFieldUpsert(col, activeTableId, columns.indexOf(col));
+  render();
+}
+
+// ---------- Confirmación custom (window.confirm no funciona en el sandbox del artifact) ----------
+let pendingConfirmCallback = null;
+function showConfirm(message, onYes){
+  document.getElementById('confirm-message').textContent = message;
+  pendingConfirmCallback = onYes;
+  document.getElementById('confirm-modal-bg').classList.add('open');
+}
+function confirmYes(){
+  document.getElementById('confirm-modal-bg').classList.remove('open');
+  const cb = pendingConfirmCallback;
+  pendingConfirmCallback = null;
+  if(cb) cb();
+}
+function confirmNo(){
+  document.getElementById('confirm-modal-bg').classList.remove('open');
+  pendingConfirmCallback = null;
+}
+
+function deleteColumn(key){
+  const col = columns.find(c => c.key === key);
+  if(!col) return;
+  showConfirm(`¿Eliminar la columna "${col.name}"? Esto borra sus datos en todas las filas.`, () => {
+    columns = columns.filter(c => c.key !== key);
+    rows.forEach(r => { delete r.data[key]; });
+    persistFieldDelete(col.id); // Postgres hace cascade: borra sus vínculos en app_record_links solo
+    render();
+  });
+}
+
+// ---------- Utilidades ----------
+function escapeHtml(str){
+  return String(str).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+}
+function escapeAttr(str){ return escapeHtml(str); }
+
+bootstrapFromSupabase(); // arranca cargando lo que ya exista en Supabase, no los datos de ejemplo fijos
+</script>
+</body>
+</html>

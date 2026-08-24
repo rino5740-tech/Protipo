@@ -1,0 +1,10 @@
+{
+  "name": "erp-no-code-prototipo",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Prototipo de ERP no-code (tipo Airtable) para microempresas, conectado a Supabase. Sitio estático de un solo archivo — sin build, sin dependencias de Node.",
+  "scripts": {
+    "dev": "npx serve .",
+    "start": "npx serve ."
+  }
+}

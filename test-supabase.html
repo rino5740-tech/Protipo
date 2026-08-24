@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Diagnóstico Supabase — ¿era el Artifact?</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<style>
+  body{
+    font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+    max-width: 760px;
+    margin: 32px auto;
+    padding: 0 20px;
+    background: #F7F5F0;
+    color: #1C1E1B;
+    line-height: 1.5;
+  }
+  h1{ font-size: 20px; }
+  p.sub{ color: #5C5F58; font-size: 13px; }
+  .card{
+    border: 1.5px solid #1C1E1B;
+    border-radius: 8px;
+    padding: 16px 18px;
+    margin-bottom: 16px;
+    background: white;
+  }
+  .card h2{ font-size: 15px; margin: 0 0 8px; }
+  .status{
+    display: inline-block;
+    font-weight: 700;
+    font-size: 13px;
+    padding: 3px 10px;
+    border-radius: 4px;
+    margin-bottom: 10px;
+  }
+  .status.pending{ background: #EFECE3; color: #5C5F58; }
+  .status.ok{ background: #E4EDE9; color: #3D6B5C; }
+  .status.fail{ background: #FBEAE6; color: #A8432F; }
+  pre{
+    background: #F2F0EA;
+    padding: 10px 12px;
+    border-radius: 5px;
+    font-size: 12px;
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 260px;
+    overflow-y: auto;
+  }
+  .verdict{
+    border: 2px solid #1C1E1B;
+    border-radius: 8px;
+    padding: 18px;
+    font-weight: 700;
+    text-align: center;
+    font-size: 15px;
+  }
+  button{
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 700;
+    padding: 9px 16px;
+    border: 1.5px solid #1C1E1B;
+    border-radius: 5px;
+    background: #1C1E1B;
+    color: white;
+    cursor: pointer;
+  }
+</style>
+</head>
+<body>
+
+  <h1>Diagnóstico: ¿la falla de Supabase era del sandbox de Claude Artifacts?</h1>
+  <p class="sub">
+    Corre la misma operación contra Supabase de dos formas: con <code>fetch</code> nativo del
+    navegador (como estaba originalmente) y con el reemplazo por <code>XMLHttpRequest</code>
+    (el arreglo aplicado por el diagnóstico previo). Si al desplegar esto en Vercel el
+    <b>fetch nativo funciona sin problema</b>, confirma que el <code>DataCloneError</code> era
+    exclusivo del sandbox del Artifact — no de Supabase, no del código de la app.
+  </p>
+
+  <button onclick="runDiagnostics()">▶ Correr diagnóstico</button>
+
+  <div class="card">
+    <h2>1) fetch() nativo del navegador (sin ningún parche)</h2>
+    <div class="status pending" id="status-native">sin correr todavía</div>
+    <pre id="result-native">—</pre>
+  </div>
+
+  <div class="card">
+    <h2>2) xhrFetch (reemplazo por XMLHttpRequest, el arreglo aplicado)</h2>
+    <div class="status pending" id="status-xhr">sin correr todavía</div>
+    <pre id="result-xhr">—</pre>
+  </div>
+
+  <div class="verdict" id="verdict" style="display:none;"></div>
+
+<script>
+// Mismas credenciales que index.html — anon key en modo prueba, ver README.md
+const SUPABASE_URL = 'https://dxwmairkrfcdrmjtxroz.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR4d21haXJrcmZjZHJtanR4cm96Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODcyNDcyMTYsImV4cCI6MjEwMjgyMzIxNn0._csQ9k3lMQF-kPv2yGWOMHIjlaAtWHhxtBeRLp4qYSQ';
+
+// El mismo xhrFetch de index.html, sin modificar (copiado tal cual)
+function xhrFetch(url, options = {}){
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open(options.method || 'GET', url, true);
+    const reqHeaders = options.headers || {};
+    Object.keys(reqHeaders).forEach(k => {
+      try { xhr.setRequestHeader(k, reqHeaders[k]); } catch(e){ /* headers reservados */ }
+    });
+    if(options.signal){
+      if(options.signal.aborted){ reject(new DOMException('cancelada', 'AbortError')); return; }
+      options.signal.addEventListener('abort', () => xhr.abort());
+    }
+    xhr.onload = () => {
+      const raw = xhr.getAllResponseHeaders() || '';
+      const headerMap = {};
+      raw.trim().split(/[\r\n]+/).forEach(line => {
+        const idx = line.indexOf(':');
+        if(idx === -1) return;
+        headerMap[line.slice(0, idx).trim().toLowerCase()] = line.slice(idx + 1).trim();
+      });
+      resolve({
+        ok: xhr.status >= 200 && xhr.status < 300,
+        status: xhr.status,
+        statusText: xhr.statusText,
+        headers: { get: (name) => headerMap[String(name).toLowerCase()] ?? null },
+        text: () => Promise.resolve(xhr.responseText),
+        json: () => Promise.resolve(xhr.responseText ? JSON.parse(xhr.responseText) : null),
+      });
+    };
+    xhr.onerror = () => reject(new TypeError('Fallo de red (XMLHttpRequest)'));
+    xhr.onabort = () => reject(new DOMException('cancelada', 'AbortError'));
+    xhr.send(options.body || null);
+  });
+}
+
+function setStatus(id, kind, text){
+  const el = document.getElementById(id);
+  el.className = 'status ' + kind;
+  el.textContent = text;
+}
+
+async function testClient(label, statusId, resultId, clientOptions){
+  try {
+    const client = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, clientOptions);
+    const { data, error } = await client.from('app_tables').select('id, name').limit(3);
+    if(error) throw error;
+    setStatus(statusId, 'ok', '✓ FUNCIONÓ — leyó ' + (data ? data.length : 0) + ' tabla(s) de Supabase');
+    document.getElementById(resultId).textContent = JSON.stringify(data, null, 2);
+    return { ok: true };
+  } catch(e){
+    setStatus(statusId, 'fail', '✗ FALLÓ — ' + (e.name || 'Error'));
+    document.getElementById(resultId).textContent =
+      (e.message || String(e)) + (e.stack ? '\n\n' + e.stack : '');
+    return { ok: false, error: e };
+  }
+}
+
+async function runDiagnostics(){
+  setStatus('status-native', 'pending', 'corriendo…');
+  setStatus('status-xhr', 'pending', 'corriendo…');
+  document.getElementById('verdict').style.display = 'none';
+
+  const authOpts = { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } };
+
+  const nativo = await testClient('fetch nativo', 'status-native', 'result-native', authOpts);
+  const xhr = await testClient('xhrFetch', 'status-xhr', 'result-xhr', { ...authOpts, global: { fetch: xhrFetch } });
+
+  const verdict = document.getElementById('verdict');
+  verdict.style.display = 'block';
+  if(nativo.ok && xhr.ok){
+    verdict.textContent = '✅ Ambos funcionan aquí en Vercel. Esto confirma que el DataCloneError era exclusivo del sandbox de Claude Artifacts — Supabase y el código de la app siempre estuvieron bien.';
+  } else if(!nativo.ok && xhr.ok){
+    verdict.textContent = '⚠️ El fetch nativo falló incluso fuera del Artifact, pero xhrFetch sí funcionó. Esto sugiere que el problema no era 100% exclusivo del sandbox — vale la pena revisar el mensaje de error del fetch nativo arriba.';
+  } else if(!nativo.ok && !xhr.ok){
+    verdict.textContent = '❌ Ambos fallaron. El problema no es el sandbox del Artifact — revisa las credenciales de Supabase, RLS, o la conexión de red.';
+  } else {
+    verdict.textContent = '🤔 Resultado inesperado: el fetch nativo funcionó pero xhrFetch no. Revisa el error de xhrFetch arriba.';
+  }
+}
+</script>
+</body>
+</html>
