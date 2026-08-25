@@ -1014,10 +1014,21 @@ function xhrFetch(url, options = {}){
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open(options.method || 'GET', url, true);
-    const reqHeaders = options.headers || {};
-    Object.keys(reqHeaders).forEach(k => {
-      try { xhr.setRequestHeader(k, reqHeaders[k]); } catch(e){ /* headers reservados, el navegador los pone solo */ }
-    });
+    // supabase-js SIEMPRE envuelve los headers salientes en una instancia real
+    // de Headers (visto en su propio código fuente, lib/fetch.ts) — incluida
+    // la apikey. Object.keys() sobre una instancia de Headers da SIEMPRE un
+    // array vacío (no son propiedades enumerables), así que hay que leerla con
+    // su propio iterador si es una Headers; si no, tratarla como objeto plano.
+    const reqHeaders = options.headers;
+    if(reqHeaders instanceof Headers){
+      for(const [k, v] of reqHeaders.entries()){
+        try { xhr.setRequestHeader(k, v); } catch(e){ /* headers reservados, el navegador los pone solo */ }
+      }
+    } else if(reqHeaders){
+      Object.keys(reqHeaders).forEach(k => {
+        try { xhr.setRequestHeader(k, reqHeaders[k]); } catch(e){ /* headers reservados, el navegador los pone solo */ }
+      });
+    }
     if(options.signal){
       if(options.signal.aborted){ reject(new DOMException('La petición fue cancelada', 'AbortError')); return; }
       options.signal.addEventListener('abort', () => xhr.abort());
