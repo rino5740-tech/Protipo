@@ -104,10 +104,19 @@ function xhrFetch(url, options = {}){
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open(options.method || 'GET', url, true);
-    const reqHeaders = options.headers || {};
-    Object.keys(reqHeaders).forEach(k => {
-      try { xhr.setRequestHeader(k, reqHeaders[k]); } catch(e){ /* headers reservados */ }
-    });
+    // supabase-js SIEMPRE envuelve los headers salientes en una instancia real
+    // de Headers (confirmado en su código fuente, lib/fetch.ts) — Object.keys()
+    // sobre una Headers da siempre un array vacío, por eso apikey nunca llegaba.
+    const reqHeaders = options.headers;
+    if(reqHeaders instanceof Headers){
+      for(const [k, v] of reqHeaders.entries()){
+        try { xhr.setRequestHeader(k, v); } catch(e){ /* headers reservados */ }
+      }
+    } else if(reqHeaders){
+      Object.keys(reqHeaders).forEach(k => {
+        try { xhr.setRequestHeader(k, reqHeaders[k]); } catch(e){ /* headers reservados */ }
+      });
+    }
     if(options.signal){
       if(options.signal.aborted){ reject(new DOMException('cancelada', 'AbortError')); return; }
       options.signal.addEventListener('abort', () => xhr.abort());
