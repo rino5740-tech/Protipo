@@ -611,6 +611,57 @@
   .group-collapse-icon.collapsed{ transform:rotate(-90deg); }
 
   /* ---- pestañas de tabla ---- */
+  /* ---- pantalla de login ---- */
+  .login-screen{
+    position:fixed;
+    inset:0;
+    background:var(--paper);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    z-index:200;
+  }
+  .login-screen.hidden{ display:none; }
+  .login-box{
+    width:320px;
+    background:var(--white);
+    border:1.5px solid var(--ink);
+    border-radius:10px;
+    padding:28px 26px;
+  }
+  .login-box h1{
+    font-size:19px;
+    font-weight:700;
+    margin:0 0 4px;
+  }
+  .login-box .sub{
+    font-size:12.5px;
+    color:var(--ink-soft);
+    margin:0 0 18px;
+  }
+  .login-box .field{ margin-bottom:14px; }
+  .login-box .field label{
+    display:block;
+    font-size:11px;
+    font-weight:700;
+    color:var(--ink-soft);
+    margin-bottom:5px;
+    text-transform:uppercase;
+    letter-spacing:.03em;
+  }
+  .login-box .field input{
+    width:100%;
+    padding:9px 10px;
+    border:1.5px solid var(--line-strong);
+    border-radius:5px;
+    font-family:inherit;
+    font-size:13.5px;
+    background:var(--paper);
+  }
+  .login-box .field input:focus{ outline:none; border-color:var(--accent); }
+  .login-box button.primary{ margin-top:4px; }
+  .login-box button.primary:disabled{ opacity:.6; cursor:default; }
+
   .tabs-bar{
     display:flex;
     align-items:flex-end;
@@ -670,12 +721,33 @@
 </head>
 <body>
 
+  <!-- Pantalla de login: cubre toda la app hasta que haya sesión real de Supabase Auth.
+       Sin botón de "crear cuenta" a propósito — el acceso solo se otorga creando el
+       usuario manualmente desde el panel de Supabase (Authentication > Users). -->
+  <div class="login-screen" id="login-screen">
+    <div class="login-box">
+      <h1>Inventario</h1>
+      <p class="sub">Inicia sesión para continuar.</p>
+      <div class="field">
+        <label>Correo</label>
+        <input type="email" id="login-email" autocomplete="username" placeholder="tucorreo@ejemplo.com">
+      </div>
+      <div class="field">
+        <label>Contraseña</label>
+        <input type="password" id="login-password" autocomplete="current-password" placeholder="••••••••">
+      </div>
+      <div id="login-error" class="hint" style="display:none;color:var(--danger);font-weight:600;"></div>
+      <button class="primary" id="login-submit-btn" style="width:100%;" onclick="handleLogin()">Iniciar sesión</button>
+    </div>
+  </div>
+
   <div class="topbar">
     <div>
       <h1 id="table-title">Inventario — Base local</h1>
-      <div class="sub">prototipo · almacenamiento en memoria · sin conexión a Supabase todavía</div>
+      <div class="sub">prototipo · conectado a Supabase · acceso solo con sesión iniciada</div>
     </div>
     <div class="badge">● draft</div>
+    <button class="ghost" id="logout-btn" onclick="handleLogout()" style="margin-left:10px;display:none;">Cerrar sesión</button>
   </div>
 
   <div class="tabs-bar" id="tabs-bar"></div>
@@ -1055,8 +1127,14 @@ function xhrFetch(url, options = {}){
     xhr.send(options.body || null);
   });
 }
+// Con login real ya en su lugar, sí queremos que la sesión se mantenga entre
+// recargas (persistSession/autoRefreshToken en true) — el problema original
+// del BroadcastChannel era específico del sandbox de Claude Artifacts; esta
+// app ahora vive principalmente en Vercel, un navegador normal sin ese
+// problema. detectSessionInUrl se deja en false porque no usamos login por
+// enlace mágico ni OAuth con redirect, solo correo + contraseña.
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-  auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+  auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false },
   global: { fetch: xhrFetch },
 });
 
@@ -3076,7 +3154,66 @@ function escapeHtml(str){
 }
 function escapeAttr(str){ return escapeHtml(str); }
 
-bootstrapFromSupabase(); // arranca cargando lo que ya exista en Supabase, no los datos de ejemplo fijos
+// ---------- Autenticación (Supabase Auth) ----------
+// Sin señal de sesión válida, la app no arranca — bootstrapFromSupabase() solo
+// se llama después de confirmar que hay un usuario autenticado. El login no
+// tiene opción de "crear cuenta": el acceso se otorga a mano desde el panel
+// de Supabase (Authentication > Users > Add user), a propósito.
+function showLoginScreen(){
+  document.getElementById('login-screen').classList.remove('hidden');
+  document.getElementById('logout-btn').style.display = 'none';
+}
+function hideLoginScreen(){
+  document.getElementById('login-screen').classList.add('hidden');
+  document.getElementById('logout-btn').style.display = 'inline-block';
+}
+async function handleLogin(){
+  const email = document.getElementById('login-email').value.trim();
+  const password = document.getElementById('login-password').value;
+  const errEl = document.getElementById('login-error');
+  const btn = document.getElementById('login-submit-btn');
+  errEl.style.display = 'none';
+  if(!email || !password){
+    errEl.textContent = 'Completa correo y contraseña.';
+    errEl.style.display = 'block';
+    return;
+  }
+  btn.disabled = true;
+  btn.textContent = 'Entrando…';
+  const { error } = await sb.auth.signInWithPassword({ email, password });
+  btn.disabled = false;
+  btn.textContent = 'Iniciar sesión';
+  if(error){
+    errEl.textContent = describeSupabaseError(error);
+    errEl.style.display = 'block';
+  }
+  // si fue exitoso, onAuthStateChange se encarga de ocultar el login y arrancar la app
+}
+async function handleLogout(){
+  await sb.auth.signOut();
+  // onAuthStateChange se encarga de mostrar el login de nuevo
+}
+// Enter en el campo de contraseña envía el formulario, como cualquier login normal
+document.addEventListener('DOMContentLoaded', () => {
+  const pwField = document.getElementById('login-password');
+  if(pwField) pwField.addEventListener('keydown', e => { if(e.key === 'Enter') handleLogin(); });
+});
+
+let appStarted = false;
+sb.auth.onAuthStateChange((event, session) => {
+  if(session){
+    hideLoginScreen();
+    if(!appStarted){
+      appStarted = true;
+      bootstrapFromSupabase();
+    }
+  } else {
+    showLoginScreen();
+    appStarted = false;
+  }
+});
+
+
 </script>
 </body>
 </html>
